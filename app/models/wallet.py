@@ -35,8 +35,6 @@ class Wallet(SQLModel, table=True):
         back_populates="payer_wallet",
         sa_relationship_kwargs={"foreign_keys": "[Escrow.payer_wallet_id]"}
     )
-
-    # Escrows where this wallet is the payee
     escrows_as_payee: list["Escrow"] = Relationship(
         back_populates="payee_wallet",
         sa_relationship_kwargs={"foreign_keys": "[Escrow.payee_wallet_id]"}

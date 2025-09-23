@@ -28,7 +28,7 @@ class SupportTicket(SQLModel, table=True):
 
     user_id: uuid.UUID = Field(foreign_key="users.id", nullable=False, index=True)
     assigned_to: Optional[uuid.UUID] = Field(
-        default=None, foreign_key="team_users.id", index=True
+        default=None, foreign_key="teamusers.id", index=True
     )
 
     subject: str = Field(nullable=False, description="Short subject of the ticket")
@@ -64,7 +64,7 @@ class SupportTicketReply(SQLModel, table=True):
         default=None, foreign_key="users.id", index=True
     )
     author_team_user_id: Optional[uuid.UUID] = Field(
-        default=None, foreign_key="team_users.id", index=True
+        default=None, foreign_key="teamusers.id", index=True
     )
 
     message: str = Field(nullable=False, description="The content of the reply")

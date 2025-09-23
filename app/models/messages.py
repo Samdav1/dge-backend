@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from typing import Optional, Dict, Any
 from enum import Enum
 
-from sqlalchemy import UniqueConstraint
+from sqlalchemy import UniqueConstraint, ForeignKey
 from sqlmodel import SQLModel, Field, Relationship, Column, JSON
 from sqlalchemy.dialects.postgresql import UUID, TIMESTAMP, ENUM, JSONB
 
@@ -29,17 +29,17 @@ class Message(SQLModel, table=True):
         sa_column=Column(UUID(as_uuid=True), primary_key=True, unique=True, nullable=False)
     )
     conversation_id: uuid.UUID = Field(
-        sa_column=Column(UUID(as_uuid=True), nullable=False, index=True, foreign_key="conversations.id")
+        sa_column=Column(UUID(as_uuid=True),ForeignKey("conversations.id"), nullable=False, index=True,)
     )
     sender_id: uuid.UUID = Field(
-        sa_column=Column(UUID(as_uuid=True), nullable=False, index=True, foreign_key="users.id")
+        sa_column=Column(UUID(as_uuid=True),ForeignKey("users.id"), nullable=False, index=True )
     )
 
     content: str = Field(nullable=False)
     content_type: MessageContentType = Field(nullable=False)
     reply_to_message_id: Optional[uuid.UUID] = Field(
         default=None,
-        sa_column=Column(UUID(as_uuid=True), nullable=True, foreign_key="messages.id")
+        sa_column=Column(UUID(as_uuid=True), ForeignKey("messages.id"), nullable=True )
     )
 
     created_at: datetime = Field(
@@ -69,8 +69,8 @@ class Message(SQLModel, table=True):
     attachments: list["MessageAttachment"] = Relationship(back_populates="message")
 
 class MessageAttachment(SQLModel, table=True):
-    id: UUID = Field(default_factory=uuid.uuid4, primary_key=True, nullable=False)
-    message_id: UUID = Field(foreign_key="messages.id", nullable=False)
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True, nullable=False)
+    message_id: uuid.UUID = Field(foreign_key="messages.id", nullable=False)
     s3_key: str = Field(nullable=False, index=True)
     mime_type: Optional[str] = Field(default=None)
     size_bytes: Optional[int] = Field(default=None)
@@ -86,9 +86,9 @@ class MessageAttachment(SQLModel, table=True):
 
 class MessageReadReceipt(SQLModel, table=True):
     __table_args__ = (UniqueConstraint("message_id", "user_id"),)
-    id: UUID = Field(default_factory=uuid.uuid4, primary_key=True, nullable=False)
-    message_id: UUID = Field(foreign_key="messages.id", nullable=False)
-    user_id: UUID = Field(foreign_key="users.id", nullable=False)
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True, nullable=False)
+    message_id: uuid.UUID = Field(foreign_key="messages.id", nullable=False)
+    user_id: uuid.UUID = Field(foreign_key="users.id", nullable=False)
 
     read_at: datetime = Field(
         default_factory=lambda:datetime.now(timezone.utc),
@@ -106,7 +106,7 @@ class PresenceStatusEnum(str, enum.Enum):
     dnd = "dnd"
 
 class Presence(SQLModel, table=True):
-    user_id: UUID = Field(foreign_key="users.id", primary_key=True)
+    user_id: uuid.UUID = Field(foreign_key="users.id", primary_key=True)
 
     last_seen: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),
@@ -114,6 +114,6 @@ class Presence(SQLModel, table=True):
         sa_column_kwargs={"server_default": "now()"},
     )
     status: PresenceStatusEnum = Field(default=PresenceStatusEnum.offline, nullable=False)
-    device_info: Optional[dict] = Field(default=None, sa_column=Column(JSONB))
+    device_info: Optional[dict] = Field(default=None, sa_column=Column(JSON))
 
     user: "Users" = Relationship(back_populates="presence")

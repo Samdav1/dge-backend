@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 from typing import Optional, Dict, Any
 from enum import Enum
 
-from sqlalchemy import UUID, TIMESTAMP, String
+from sqlalchemy import UUID, TIMESTAMP, String, ForeignKey
 from sqlmodel import SQLModel, Field, Relationship, Column, JSON
 
 
@@ -22,10 +22,10 @@ class ConversationParticipant(SQLModel, table=True):
     )
 
     conversation_id: uuid.UUID = Field(
-        sa_column=Column(UUID(as_uuid=True), nullable=False, index=True, foreign_key="conversations.id")
+        sa_column=Column(UUID(as_uuid=True), ForeignKey("conversations.id"), nullable=False, index=True, )
     )
     user_id: uuid.UUID = Field(
-        sa_column=Column(UUID(as_uuid=True), nullable=False, index=True, foreign_key="users.id")
+        sa_column=Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True, )
     )
 
     joined_at: datetime = Field(
@@ -68,7 +68,7 @@ class Conversation(SQLModel, table=True):
         sa_column=Column(UUID(as_uuid=True), nullable=True),
     )
 
-    metadataInfo: dict = Field(default_factory=dict)
+    metadataInfo: dict = Field(default_factory=dict, sa_column=Column(JSON))
 
     # Relationships
     participants: list["ConversationParticipant"] = Relationship(back_populates="conversation")
