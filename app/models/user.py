@@ -4,7 +4,6 @@ from typing import Optional
 from sqlmodel import SQLModel, Field, Relationship
 from enum import Enum
 
-
 class UserStatus(str, Enum):
     active = "active"
     inactive = "inactive"
@@ -26,6 +25,18 @@ class Users(SQLModel, table=True):
     updated_at: datetime = Field(default_factory= lambda: datetime.now(timezone.utc), nullable=False)
     locations: list["Locations"] = Relationship(back_populates="user")
     profile: 'Profile' = Relationship(back_populates='user')
+    wallet : 'Wallet' = Relationship(back_populates='user')
+    transactions: list["Transaction"] = Relationship(back_populates="user")
+    portfolios: list["UserPortfolio"] = Relationship(back_populates="user")
+    reviews: list["Review"] = Relationship(back_populates="user")
+    support_tickets: list["SupportTicket"] = Relationship(back_populates="user")
+    ticket_replies: list["SupportTicketReply"] = Relationship(back_populates="author_user")
+    conversations: list["ConversationParticipant"] = Relationship(back_populates="user")
+    messages: list["Message"] = Relationship(back_populates="sender")
+    read_receipts: list['MessageReadReceipt'] = Relationship(back_populates="user")
+    presence: "Presence" = Relationship(back_populates="user")
+    initiated_calls: list["CallSession"] = Relationship(back_populates="initiator")
+
 
 class Locations(SQLModel, table=True):
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)

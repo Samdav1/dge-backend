@@ -35,6 +35,10 @@ class TeamUsers(SQLModel, table=True):
     teams: List["Teams"] = Relationship(
         back_populates="users", link_model=TeamMembership
     )
+    permissions: List["Permissions"] = Relationship(back_populates="team_user")
+    role: "Role" = Relationship(back_populates="team_user")
+    assigned_tickets: list["SupportTicket"] = Relationship(back_populates="assigned_team_user")
+    ticket_replies: list["SupportTicketReply"] = Relationship(back_populates="author_team_user")
 
 
 class TeamType(str, Enum):
@@ -66,3 +70,5 @@ class Teams(SQLModel, table=True):
     users: List[TeamUsers] = Relationship(
         back_populates="teams", link_model=TeamMembership
     )
+
+
