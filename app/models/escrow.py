@@ -21,11 +21,19 @@ class Escrow(SQLModel, table=True):
         nullable=False
     )
     payer_wallet_id: uuid.UUID = Field(
-        sa_column=Column("payer_wallet_id", ForeignKey("wallets.id"), nullable=False)
+        sa_column=Column(ForeignKey("wallets.id"),  nullable=False)
     )
     payee_wallet_id: uuid.UUID = Field(
-        sa_column=Column("payee_wallet_id", ForeignKey("wallets.id"), nullable=False)
+        sa_column=Column(ForeignKey("wallets.id"), nullable=False)
     )
+    payment_negotiation_id: uuid.UUID = Field(
+        sa_column=Column(
+            "payment_negotiation_id",
+            ForeignKey("payment_negotiation.id"),
+            nullable=False
+        )
+    )
+
     amount_cents: int = Field(
         sa_column=Column(BigInteger, nullable=False)
     )
@@ -40,3 +48,6 @@ class Escrow(SQLModel, table=True):
         back_populates="escrows_as_payee",
         sa_relationship_kwargs={"foreign_keys": "[Escrow.payee_wallet_id]"}
     )
+    price_negotiation: 'PriceNegotiation' = Relationship(back_populates="escrow")
+    submission: "WorkSubmission" = Relationship(back_populates="escrow")
+

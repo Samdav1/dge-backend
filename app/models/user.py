@@ -56,6 +56,16 @@ class Users(SQLModel, table=True):
     initiated_calls: list["CallSession"] = Relationship(back_populates="initiator")
     call_participations: "CallParticipant" = Relationship(back_populates="users")
     kyc: "KYC" = Relationship(back_populates="user")
+    services : list["Service"] = Relationship(back_populates="user")
+    negotiations_outgoing: list["PriceNegotiation"] = Relationship(
+        back_populates="initiator",
+        sa_relationship_kwargs={"foreign_keys": "[PriceNegotiation.initiator_id]"}
+    )
+    negotiations_incoming: list["PriceNegotiation"] = Relationship(
+        back_populates="receiver",
+        sa_relationship_kwargs={"foreign_keys": "[PriceNegotiation.receiver_id]"}
+    )
+    notifications: list["Notification"] = Relationship(back_populates="user")
 
 
 class Locations(SQLModel, table=True):

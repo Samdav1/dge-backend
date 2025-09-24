@@ -29,7 +29,7 @@ class ConversationParticipant(SQLModel, table=True):
     )
 
     joined_at: datetime = Field(
-        default_factory=datetime.utcnow,
+        default_factory=lambda: datetime.now(timezone.utc),
         sa_column=Column(TIMESTAMP(timezone=True), nullable=False),
     )
     left_at: Optional[datetime] = Field(
@@ -42,7 +42,6 @@ class ConversationParticipant(SQLModel, table=True):
         sa_column=Column(String, nullable=False),
     )
 
-    # Relationships
     conversation: "Conversation" = Relationship(back_populates="participants")
     user: "Users" = Relationship(back_populates="conversations")
 
