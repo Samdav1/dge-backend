@@ -34,6 +34,10 @@ class Transaction(SQLModel, table=True):
         sa_column=Column("wallet_id", ForeignKey("wallets.id"), nullable=False)
     )
 
+    users_id: uuid.UUID = Field(
+        sa_column=Column("users_id", ForeignKey("users.id"), nullable=False)
+    )
+
     type: TxnType = Field(
         sa_column=Column(Enum(TxnType, name="txn_type_enum"), nullable=False, index=True)
     )
@@ -51,4 +55,4 @@ class Transaction(SQLModel, table=True):
         nullable=True,
         index=True
     )
-    user: 'User' = Relationship(back_populates="transactions")
+    user: 'Users' = Relationship(back_populates="transactions")

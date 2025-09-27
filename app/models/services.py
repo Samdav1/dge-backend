@@ -80,5 +80,5 @@ class Service(SQLModel, table=True):
     )
 
     user: 'Users' = Relationship(back_populates="services")
-    negotiations: 'PriceNegotiations' = Relationship(back_populates="services")
-    submission: "Worksubmission" = Relationship(back_populates="service")
+    negotiations: 'PriceNegotiation' = Relationship(back_populates="services")
+    submissions: "WorkSubmission" = Relationship(back_populates="service")

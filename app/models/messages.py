@@ -67,6 +67,8 @@ class Message(SQLModel, table=True):
     )
     replies: list["Message"] = Relationship(back_populates="reply_to_message")
     attachments: list["MessageAttachment"] = Relationship(back_populates="message")
+    read_receipts: "MessageReadReceipt" = Relationship(back_populates="message")
+
 
 class MessageAttachment(SQLModel, table=True):
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True, nullable=False)
@@ -82,6 +84,7 @@ class MessageAttachment(SQLModel, table=True):
         sa_column_kwargs={"server_default": "now()"},
     )
     message: "Message" = Relationship(back_populates="attachments")
+
 
 
 class MessageReadReceipt(SQLModel, table=True):

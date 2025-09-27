@@ -79,5 +79,5 @@ class Review(SQLModel, table=True):
 
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), nullable=False)
 
-    user: "User" = Relationship(back_populates="reviews")
+    user: "Users" = Relationship(back_populates="reviews")
     portfolio: "UserPortfolio" = Relationship(back_populates="reviews")

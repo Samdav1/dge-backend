@@ -61,8 +61,8 @@ class PriceNegotiation(SQLModel, table=True):
         nullable=False
     )
 
-    service: "Service" = Relationship(back_populates="negotiations")
-    initiator: "User" = Relationship(back_populates="negotiations_outgoing", sa_relationship_kwargs={"foreign_keys": "[PriceNegotiation.initiator_id]"})
-    receiver: "User" = Relationship(back_populates="negotiations_incoming", sa_relationship_kwargs={"foreign_keys": "[PriceNegotiation.receiver_id]"})
+    services: "Service" = Relationship(back_populates="negotiations")
+    initiator: "Users" = Relationship(back_populates="negotiations_outgoing", sa_relationship_kwargs={"foreign_keys": "[PriceNegotiation.initiator_id]"})
+    receiver: "Users" = Relationship(back_populates="negotiations_incoming", sa_relationship_kwargs={"foreign_keys": "[PriceNegotiation.receiver_id]"})
     escrow: 'Escrow' = Relationship(back_populates="price_negotiation")
     notifications: list['Notification'] = Relationship(back_populates="price_negotiation")

@@ -17,7 +17,7 @@ class LocationType(str, Enum):
     OFFICE = "office"
     HOME = "home"
 
-def generate_referral_code(length=8):
+def generate_referral_code(length=12):
     alphabet = string.ascii_uppercase + string.digits
     return "".join(secrets.choice(alphabet) for i in range(length))
 
@@ -34,6 +34,7 @@ class Users(SQLModel, table=True):
         nullable=False
     )
     referred_by_id: Optional[uuid.UUID] = Field(default=None, foreign_key="users.id")
+
     referrer: Optional["Users"] = Relationship(
         back_populates="referrals",
         sa_relationship_kwargs={"remote_side": "Users.id"}
@@ -65,7 +66,15 @@ class Users(SQLModel, table=True):
         back_populates="receiver",
         sa_relationship_kwargs={"foreign_keys": "[PriceNegotiation.receiver_id]"}
     )
-    notifications: list["Notification"] = Relationship(back_populates="user")
+    notifications: List["Notification"] = Relationship(
+        back_populates="user",
+        sa_relationship_kwargs={"foreign_keys": "[Notification.user_id]"}
+    )
+
+    notifications_sent: List["Notification"] = Relationship(
+        back_populates="actor",
+        sa_relationship_kwargs={"foreign_keys": "[Notification.actor_id]"}
+    )
 
 
 class Locations(SQLModel, table=True):

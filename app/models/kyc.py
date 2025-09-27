@@ -48,4 +48,4 @@ class KYC(SQLModel, table=True):
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), sa_column_kwargs={"onupdate": datetime.now(timezone.utc)})
 
     user: "Users" = Relationship(back_populates="kyc")
-    reviewed_by: Optional["TeamUser"] = Relationship(back_populates="team_user")
+    reviewed_by: Optional["TeamUsers"] = Relationship(back_populates="team_user")

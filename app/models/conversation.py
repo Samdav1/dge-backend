@@ -72,6 +72,8 @@ class Conversation(SQLModel, table=True):
     # Relationships
     participants: list["ConversationParticipant"] = Relationship(back_populates="conversation")
     messages: list["Message"] = Relationship(back_populates="conversation")
+    call_sessions: Optional["CallSession"] = Relationship(back_populates="conversation")
+
 
 
 

@@ -1,16 +1,18 @@
 import uvicorn
 from fastapi import FastAPI
-from api.v1 import users
 from app.db.session import engine
 from sqlmodel import SQLModel
 import app.models
+from app.api.v1 import router as api_router
 
 
 app = FastAPI(title="DGE Techs")
+app.include_router(api_router)
+
 
 SQLModel.metadata.create_all(bind=engine)
 
-app.include_router(users.router, prefix="/users", tags=["users"])
+
 
 @app.get("/")
 async def root():

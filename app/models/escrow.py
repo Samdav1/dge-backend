@@ -28,8 +28,7 @@ class Escrow(SQLModel, table=True):
     )
     payment_negotiation_id: uuid.UUID = Field(
         sa_column=Column(
-            "payment_negotiation_id",
-            ForeignKey("payment_negotiation.id"),
+            ForeignKey("price_negotiations.id"),
             nullable=False
         )
     )
@@ -49,5 +48,5 @@ class Escrow(SQLModel, table=True):
         sa_relationship_kwargs={"foreign_keys": "[Escrow.payee_wallet_id]"}
     )
     price_negotiation: 'PriceNegotiation' = Relationship(back_populates="escrow")
-    submission: "WorkSubmission" = Relationship(back_populates="escrow")
+    submissions: "WorkSubmission" = Relationship(back_populates="escrow")
 
