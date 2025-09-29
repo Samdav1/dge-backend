@@ -1,16 +1,18 @@
+from sqlalchemy import Column, DateTime
 from sqlmodel import SQLModel, Field, Relationship
 import uuid
 from typing import Optional
 from datetime import datetime, timezone, date
+from sqlmodel import TIMESTAMP
 
 
 
 class Profile(SQLModel, table=True):
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True, index=True)
     user_id: uuid.UUID = Field(foreign_key="users.id", unique=True, nullable=False, index=True)
-    team_id: Optional[uuid.UUID] = Field(foreign_key="teamusers.id", nullable=False, index=True)
-    first_name: str = Field(nullable=False, index=True)
-    last_name: str = Field(nullable=False, index=True)
+    team_id: Optional[uuid.UUID] = Field(foreign_key="teamusers.id", index=True)
+    first_name: Optional[str] = Field(nullable=False, index=True)
+    last_name: Optional[str] = Field(nullable=False, index=True)
     date_of_birth: Optional[date] = None
 
     gender: Optional[str] = Field(default=None)
@@ -25,12 +27,12 @@ class Profile(SQLModel, table=True):
     avatar_url: Optional[str] = None
 
     created_at: datetime = Field(
+        sa_column=Column(DateTime(timezone=True), nullable=False),
         default_factory=lambda: datetime.now(timezone.utc),
-        nullable=False
     )
     updated_at: datetime = Field(
+        sa_column=Column(DateTime(timezone=True), nullable=False),
         default_factory=lambda: datetime.now(timezone.utc),
-        nullable=False
     )
 
     user: 'Users' = Relationship(back_populates='profile')

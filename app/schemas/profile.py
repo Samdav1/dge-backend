@@ -8,8 +8,8 @@ if TYPE_CHECKING:
 
 
 class ProfileBase(SQLModel):
-    first_name: str
-    last_name: str
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
     date_of_birth: Optional[date] = None
     gender: Optional[str] = None
     phone: Optional[str] = None
@@ -18,7 +18,7 @@ class ProfileBase(SQLModel):
     city: Optional[str] = None
     state: Optional[str] = None
     postal_code: Optional[str] = None
-    country: str
+    country: Optional[str] = None
     bio: Optional[str] = None
     avatar_url: Optional[str] = None
 

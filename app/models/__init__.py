@@ -1,5 +1,5 @@
 from .team import TeamUsers, Teams, TeamMembership
-from .user import Users, Locations, Admin
+from .user import Users, Locations, Admin, RefreshToken
 from .profile import Profile
 from .kyc import KYC
 from .escrow import Escrow
@@ -52,4 +52,5 @@ __all__ = [
     "Service",
     "ServiceCategory",
     "Notification",
+    "RefreshToken"
 ]

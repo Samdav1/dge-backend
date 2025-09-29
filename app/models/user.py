@@ -3,6 +3,8 @@ import string
 import uuid
 from datetime import datetime, timezone
 from typing import Optional, List
+
+from sqlalchemy import Column, DateTime
 from sqlmodel import SQLModel, Field, Relationship
 from enum import Enum
 
@@ -40,8 +42,14 @@ class Users(SQLModel, table=True):
         sa_relationship_kwargs={"remote_side": "Users.id"}
     )
     referrals: List["Users"] = Relationship(back_populates="referrer")
-    created_at: datetime = Field(default_factory= lambda: datetime.now(timezone.utc), nullable=False)
-    updated_at: datetime = Field(default_factory= lambda: datetime.now(timezone.utc), nullable=False)
+    created_at: datetime = Field(
+        sa_column=Column(DateTime(timezone=True), nullable=False),
+        default_factory=lambda: datetime.now(timezone.utc)
+    )
+    updated_at: datetime = Field(
+        sa_column=Column(DateTime(timezone=True), nullable=False),
+        default_factory=lambda: datetime.now(timezone.utc)
+    )
     locations: list["Locations"] = Relationship(back_populates="user")
     profile: 'Profile' = Relationship(back_populates='user')
     wallet : 'Wallet' = Relationship(back_populates='user')
@@ -75,6 +83,7 @@ class Users(SQLModel, table=True):
         back_populates="actor",
         sa_relationship_kwargs={"foreign_keys": "[Notification.actor_id]"}
     )
+    refresh_tokens: list["RefreshToken"] = Relationship(back_populates="user")
 
 
 class Locations(SQLModel, table=True):
@@ -93,3 +102,19 @@ class Admin(SQLModel, table=True):
     team_id: Optional[uuid.UUID]= Field( foreign_key="teams.id")
     full_permission: bool = Field(default=True, nullable=False)
     team: Optional['Teams']= Relationship(back_populates="admin")
+
+class RefreshToken(SQLModel, table=True):
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    user_id: uuid.UUID = Field(foreign_key="users.id", nullable=False)
+    token: str = Field(nullable=False, unique=True, index=True)
+    created_at: datetime = Field(
+        sa_column=Column(DateTime(timezone=True), nullable=False),
+        default_factory=lambda: datetime.now(timezone.utc),
+    )
+    expires_at: datetime = Field(
+        sa_column=Column(DateTime(timezone=True), nullable=False),
+        default_factory=lambda: datetime.now(timezone.utc),
+    )
+    revoked: bool = Field(default=False, nullable=False)
+
+    user: "Users" = Relationship(back_populates="refresh_tokens")

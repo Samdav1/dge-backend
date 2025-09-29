@@ -1,4 +1,3 @@
-# app/api/v1/__init__.py
 import pkgutil, importlib
 from fastapi import APIRouter
 
