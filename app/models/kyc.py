@@ -3,7 +3,8 @@ import uuid
 from datetime import date, datetime, timezone
 from typing import TYPE_CHECKING, Optional
 
-from sqlmodel import Field, Relationship, SQLModel
+from sqlalchemy import Column
+from sqlmodel import Field, Relationship, SQLModel, DateTime
 
 
 
@@ -42,10 +43,17 @@ class KYC(SQLModel, table=True):
     address_document_s3_key: Optional[str] = Field(default=None)
     rejection_reason: Optional[str] = Field(default=None)
     reviewed_by_id: Optional[uuid.UUID] = Field(default=None, foreign_key="teamusers.id")
-    submitted_at: Optional[datetime] = Field(default=None)
-    reviewed_at: Optional[datetime] = Field(default=None)
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), nullable=False)
-    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), sa_column_kwargs={"onupdate": datetime.now(timezone.utc)})
+    submitted_at: Optional[datetime] = Field(default=None, sa_column=Column(DateTime(timezone=True)))
+    reviewed_at: Optional[datetime] = Field(default=None, sa_column=Column(DateTime(timezone=True)))
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+        sa_column=Column(DateTime(timezone=True),
+        nullable=False))
+
+    updated_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+        sa_column=Column(DateTime(timezone=True), onupdate=lambda: datetime.now(timezone.utc), nullable=False)
+    )
 
     user: "Users" = Relationship(back_populates="kyc")
     reviewed_by: Optional["TeamUsers"] = Relationship(back_populates="team_user")

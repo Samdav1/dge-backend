@@ -24,7 +24,7 @@ class Wallet(SQLModel, table=True):
     wallet_type: WalletType = Field(
         sa_column=Column(Enum(WalletType, name="wallet_type_enum"), nullable=False)
     )
-    balance_cents: int = Field(
+    balance_cents: float = Field(
         sa_column=Column(BigInteger, nullable=False, default=0)
     )
     currency: str = Field(default="USD", nullable=False)

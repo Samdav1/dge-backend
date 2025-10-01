@@ -7,6 +7,7 @@ from app.db.session import get_session
 from app.models.user import Users
 from app.repositories.user_repo import get_user_by_id
 from app.services.auth_service import rotate_refresh_token
+from app.schemas.user import UserRead
 
 security = HTTPBearer()
 
@@ -26,8 +27,8 @@ async def get_current_user(
         user = await get_user_by_id(user_id, db)
         if not user:
             raise HTTPException(status_code=401, detail="User not found")
-
-        return user
+        validated_user = UserRead.model_validate(user)
+        return validated_user
 
     except JWTError:
         refresh_token = request.cookies.get("refresh_token")
@@ -58,7 +59,8 @@ async def get_current_user(
             new_access_token = await get_access_token(str(user.id))
             request.state.new_access_token = new_access_token
 
-            return user
+            validated_user = UserRead.model_validate(user)
+            return validated_user
 
         except Exception:
             raise HTTPException(status_code=401, detail="Refresh expired, please login again")
