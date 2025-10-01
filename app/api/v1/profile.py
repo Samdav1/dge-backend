@@ -26,7 +26,8 @@ async def update_profile(
     user_id = getattr(request.state, "user_id", None)
     if not user_id:
         raise HTTPException(status_code=401, detail="Invalid access token payload, not valid")
-    updated_profile = await update_user_profile_service(db=db, profile=profile, user_id=user_id)
-    if not updated_profile:
-        raise HTTPException(status_code=404, detail="Profile not found")
+    try:
+        updated_profile = await update_user_profile_service(db=db, profile=profile, user_id=user_id)
+    except Exception as e:
+        raise HTTPException(status_code=404, detail=f"{e}, Profile not found")
     return updated_profile
