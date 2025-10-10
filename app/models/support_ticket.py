@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 from enum import Enum
 from typing import Optional, Dict, Any
 
-from sqlalchemy import Column, JSON
+from sqlalchemy import Column, JSON, DateTime
 from sqlmodel import SQLModel, Field, Relationship
 
 
@@ -26,7 +26,7 @@ class SupportTicket(SQLModel, table=True):
 
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True, index=True)
 
-    user_id: uuid.UUID = Field(foreign_key="users.id", nullable=False, index=True)
+    user_id: uuid.UUID = Field(foreign_key="users.id", nullable=False, index=True, )
     assigned_to: Optional[uuid.UUID] = Field(
         default=None, foreign_key="teamusers.id", index=True
     )
@@ -42,15 +42,19 @@ class SupportTicket(SQLModel, table=True):
     )
 
     created_at: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc), nullable=False
+        sa_column=Column(DateTime(timezone=True), nullable=False),
+        default_factory=lambda: datetime.now(timezone.utc),
     )
-    updated_at: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc), nullable=False
+    updated_at: datetime =Field(
+        sa_column=Column(DateTime(timezone=True), nullable=False),
+        default_factory=lambda: datetime.now(timezone.utc),
     )
 
     user: "Users" = Relationship(back_populates="support_tickets")
     assigned_team_user: Optional["TeamUsers"] = Relationship(back_populates="assigned_tickets")
-    replies: list["SupportTicketReply"] = Relationship(back_populates="ticket")
+    replies: list["SupportTicketReply"] = Relationship(
+        back_populates="ticket",
+        sa_relationship_kwargs={"passive_deletes": True, "cascade": "all, delete-orphan"})
 
 
 class SupportTicketReply(SQLModel, table=True):
@@ -59,7 +63,7 @@ class SupportTicketReply(SQLModel, table=True):
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True, index=True)
 
     # Foreign keys
-    ticket_id: uuid.UUID = Field(foreign_key="support_tickets.id", nullable=False, index=True)
+    ticket_id: uuid.UUID = Field(foreign_key="support_tickets.id", nullable=False, index=True, ondelete="CASCADE")
     author_user_id: Optional[uuid.UUID] = Field(
         default=None, foreign_key="users.id", index=True
     )
@@ -74,10 +78,14 @@ class SupportTicketReply(SQLModel, table=True):
     )
 
     created_at: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc), nullable=False
+        sa_column=Column(DateTime(timezone=True), nullable=False),
+        default_factory=lambda: datetime.now(timezone.utc),
     )
 
-    ticket: "SupportTicket" = Relationship(back_populates="replies")
+    ticket: "SupportTicket" = Relationship(
+        back_populates="replies",
+        sa_relationship_kwargs={"passive_deletes": True,}
+        )
     author_user: Optional["Users"] = Relationship(back_populates="ticket_replies")
     author_team_user: Optional["TeamUsers"] = Relationship(back_populates="ticket_replies")
 

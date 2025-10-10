@@ -18,6 +18,7 @@ from .services import Service, ServiceCategory
 from .price_negotiation import PriceNegotiation
 from .work_submissions import WorkSubmission
 from .notifications import Notification
+from .admin import SuperAdmin
 
 __all__ = [
     "Users",
@@ -52,5 +53,6 @@ __all__ = [
     "Service",
     "ServiceCategory",
     "Notification",
-    "RefreshToken"
+    "RefreshToken",
+    "SuperAdmin"
 ]

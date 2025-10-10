@@ -24,7 +24,7 @@ class ProfileBase(SQLModel):
 
 
 class ProfileCreate(ProfileBase):
-    user_id: uuid.UUID
+    user_id: Optional[uuid.UUID] = uuid.uuid4()
     team_id: Optional[uuid.UUID] = None
 
 

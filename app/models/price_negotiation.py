@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 from typing import Optional
 
 from sqlmodel import SQLModel, Field, Column, ForeignKey, Relationship
-from sqlalchemy import Enum, BigInteger, Text, UUID
+from sqlalchemy import Enum, BigInteger, Text, UUID, DateTime
 import enum
 
 class NegotiationType(str, enum.Enum):
@@ -53,12 +53,12 @@ class PriceNegotiation(SQLModel, table=True):
     )
 
     created_at: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc),
-        nullable=False
+        sa_column=Column(DateTime(timezone=True), nullable=False),
+        default_factory=lambda: datetime.now(timezone.utc)
     )
     updated_at: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc),
-        nullable=False
+        sa_column=Column(DateTime(timezone=True), nullable=False),
+        default_factory=lambda: datetime.now(timezone.utc)
     )
 
     services: "Service" = Relationship(back_populates="negotiations")

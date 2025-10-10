@@ -1,5 +1,7 @@
 import uuid
 from datetime import datetime, timezone
+
+from sqlalchemy import Column, DateTime
 from sqlmodel import SQLModel, Field, Relationship
 from typing import Optional, List
 from enum import Enum
@@ -12,8 +14,8 @@ class TeamMembership(SQLModel, table=True):
     team_id: uuid.UUID = Field(foreign_key="teams.id", primary_key=True)
     user_id: uuid.UUID = Field(foreign_key="teamusers.id", primary_key=True)
     joined_at: datetime = Field(
+        sa_column=Column(DateTime(timezone=True), nullable=False),
         default_factory=lambda: datetime.now(timezone.utc),
-        nullable=False
     )
 
 
@@ -28,8 +30,8 @@ class TeamUsers(SQLModel, table=True):
     is_superuser: bool = Field(default=False, nullable=False)
     status: UserStatus = Field(default=UserStatus.active, nullable=False)
     created_at: datetime = Field(
+        sa_column=Column(DateTime(timezone=True), nullable=False),
         default_factory=lambda: datetime.now(timezone.utc),
-        nullable=False
     )
 
     teams: List["Teams"] = Relationship(
@@ -62,12 +64,12 @@ class Teams(SQLModel, table=True):
         default=TeamType.customer_service, nullable=False
     )
     created_at: datetime = Field(
+        sa_column=Column(DateTime(timezone=True),  nullable=False),
         default_factory=lambda: datetime.now(timezone.utc),
-        nullable=False
     )
     updated_at: datetime = Field(
+        sa_column=Column(DateTime(timezone=True), nullable=False),
         default_factory=lambda: datetime.now(timezone.utc),
-        nullable=False
     )
 
     users: List[TeamUsers] = Relationship(

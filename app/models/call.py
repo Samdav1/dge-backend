@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from typing import List, Optional
 from uuid import UUID, uuid4
 
-from sqlalchemy import Column, UniqueConstraint, JSON, ForeignKey
+from sqlalchemy import Column, UniqueConstraint, JSON, ForeignKey, TIMESTAMP, DateTime
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlmodel import Field, Relationship, SQLModel
 
@@ -35,12 +35,17 @@ class CallSession(SQLModel, table=True):
     call_type: CallTypeEnum = Field(nullable=False)
     status: CallStatusEnum = Field(default=CallStatusEnum.initiated, nullable=False)
 
-    started_at: Optional[datetime] = Field(default=None)
-    ended_at: Optional[datetime] = Field(default=None)
+    started_at: Optional[datetime] = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+        sa_column=Column(DateTime(timezone=True)),
+    )
+    ended_at: Optional[datetime] = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+        sa_column=Column(DateTime(timezone=True)),
+    )
     created_at: datetime = Field(
-        default_factory=lambda :datetime.now(timezone.utc),
-        nullable=False,
-        sa_column_kwargs={"server_default": "now()"},
+        default_factory=lambda: datetime.now(timezone.utc),
+        sa_column=Column(DateTime(timezone=True), nullable=False),
     )
     signaling_metadata: Optional[dict] = Field(default=None, sa_column=Column(JSON))
 
@@ -62,8 +67,14 @@ class CallParticipant(SQLModel, table=True):
     )
     muted: bool = Field(default=False, nullable=False)
     role: Optional[str] = Field(default="participant")
-    joined_at: Optional[datetime] = Field(default_factory=datetime.utcnow)
-    left_at: Optional[datetime] = Field(default=None)
+    joined_at: Optional[datetime] = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+        sa_column=Column(DateTime(timezone=True), nullable=False),
+    )
+    left_at: Optional[datetime] =  Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+        sa_column_kwargs={"server_default": "now()"},
+    )
     call_session: "CallSession" = Relationship(back_populates="participants")
     users: "Users" = Relationship(back_populates="call_participations")
 
@@ -79,9 +90,7 @@ class CallRecording(SQLModel, table=True):
     duration_seconds: Optional[int] = Field(default=None)
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),
-        nullable=False,
-        sa_column_kwargs={"server_default": "now()"},
-    )
+        sa_column=Column(DateTime(timezone=True), nullable=False))
 
     call_session: "CallSession" = Relationship(back_populates="recordings")
 

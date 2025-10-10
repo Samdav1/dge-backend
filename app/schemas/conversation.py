@@ -28,7 +28,7 @@ class ConversationParticipantRead(ConversationParticipantBase):
     left_at: Optional[datetime] = None
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 

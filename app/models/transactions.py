@@ -1,7 +1,8 @@
 import uuid
+from datetime import datetime, timezone
 
 from sqlmodel import SQLModel, Field, Column, ForeignKey, Relationship
-from sqlalchemy import Enum, BigInteger
+from sqlalchemy import Enum, BigInteger, DateTime
 import enum
 
 class TxnType(str, enum.Enum):
@@ -54,5 +55,13 @@ class Transaction(SQLModel, table=True):
         default=None,
         nullable=True,
         index=True
+    )
+    created_at: datetime = Field(
+        sa_column=Column(DateTime(timezone=True), nullable=False),
+        default_factory=lambda: datetime.now(timezone.utc),
+    )
+    updated_at: datetime = Field(
+        sa_column=Column(DateTime(timezone=True), nullable=False),
+        default_factory=lambda: datetime.now(timezone.utc),
     )
     user: 'Users' = Relationship(back_populates="transactions")

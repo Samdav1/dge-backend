@@ -1,6 +1,6 @@
 from typing import Optional
 
-from sqlalchemy import Column, JSON
+from sqlalchemy import Column, JSON, DateTime
 from sqlalchemy.testing.pickleable import User
 from sqlmodel import SQLModel, Field, TIMESTAMP, ForeignKey, Relationship
 from datetime import datetime, timezone
@@ -37,8 +37,13 @@ class Notification(SQLModel, table=True):
     message: str = Field(nullable=False)
     metadataInfo: dict = Field(default_factory=dict, sa_column=Column(JSON))
     is_read: bool = Field(default=False, nullable=False)
-    created_at: datetime = Field(default_factory=lambda:datetime.now(timezone.utc), nullable=False)
-    read_at: Optional[datetime] = Field(default=None)
+    created_at: datetime = Field(
+        sa_column=Column(DateTime(timezone=True), nullable=False),
+        default_factory=lambda:datetime.now(timezone.utc),
+    )
+    read_at: Optional[datetime] = Field(
+        sa_column=Column(DateTime(timezone=True)),
+    )
 
     user: "Users" = Relationship(
         back_populates="notifications",
@@ -50,5 +55,3 @@ class Notification(SQLModel, table=True):
         sa_relationship_kwargs={"foreign_keys": "[Notification.actor_id]"}
     )
     price_negotiation: Optional['PriceNegotiation'] = Relationship(back_populates="notifications")
-
-

@@ -35,7 +35,13 @@ async def token_login(user_info: UserToken, db):
     else:
      return UserRead.model_validate(user_detail)
 
-async def issue_refresh_token(db: AsyncSession , user_id: str):
+async def issue_refresh_token(db: AsyncSession, user_id: str):
+    """
+
+    :param db:
+    :param user_id:
+    :return:
+    """
     token = await get_refresh_token(subject=user_id)
     expires_at = datetime.now(timezone.utc) + timedelta(days=int(REFRESH_TOKEN_EXPIRY_DAYS))
 

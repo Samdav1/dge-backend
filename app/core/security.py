@@ -44,7 +44,7 @@ async def get_refresh_token(subject: str, data: Dict[str, Any] = None, expires_d
         to_encode.update(data)
     expires = datetime.now(timezone.utc) + (expires_delta or timedelta(minutes=int(LONG_TOKEN_EXPIRATION_TIME)))
     to_encode.update({"exp": expires})
-    return jwt.encode(to_encode,REFRESH_PRIVATE_KEY, algorithm=ALGORITHM)
+    return jwt.encode(to_encode, REFRESH_PRIVATE_KEY, algorithm=ALGORITHM)
 
 async def decode_refresh_token(token: str, options: Dict[str, Any] = None) -> Dict[str, Any]:
     try:

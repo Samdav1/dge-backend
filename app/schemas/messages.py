@@ -5,10 +5,6 @@ from typing import Optional, Dict, Any, List
 from pydantic import BaseModel
 from enum import Enum
 
-
-# ==========================
-# ENUMS
-# ==========================
 class MessageContentType(str, Enum):
     text = "text"
     image = "image"
@@ -29,10 +25,6 @@ class PresenceStatusEnum(str, Enum):
     away = "away"
     dnd = "dnd"
 
-
-# ==========================
-# ATTACHMENTS
-# ==========================
 class MessageAttachmentBase(BaseModel):
     s3_key: str
     mime_type: Optional[str] = None
@@ -53,10 +45,6 @@ class MessageAttachmentRead(MessageAttachmentBase):
     class Config:
         from_attributes = True
 
-
-# ==========================
-# MESSAGE READ RECEIPT
-# ==========================
 class MessageReadReceiptBase(BaseModel):
     pass
 
@@ -75,10 +63,6 @@ class MessageReadReceiptRead(MessageReadReceiptBase):
     class Config:
         from_attributes = True
 
-
-# ==========================
-# MESSAGES
-# ==========================
 class MessageBase(BaseModel):
     content: str
     content_type: MessageContentType
@@ -107,9 +91,9 @@ class MessageRead(MessageBase):
     status: MessageStatus
 
     # nested relationships
-    attachments: List[MessageAttachmentRead] = []
-    replies: List["MessageRead"] = []
-    read_receipts: List[MessageReadReceiptRead] = []
+    # attachments: List[MessageAttachmentRead] = []
+    # replies: List["MessageRead"] = []
+    # read_receipts: List[MessageReadReceiptRead] = []
 
     class Config:
         from_attributes = True
@@ -117,22 +101,27 @@ class MessageRead(MessageBase):
 
 MessageRead.model_rebuild()  # for self-referencing replies
 
-
-# ==========================
-# PRESENCE
-# ==========================
 class PresenceBase(BaseModel):
-    status: PresenceStatusEnum = PresenceStatusEnum.offline
-    device_info: Optional[dict] = None
+    status: PresenceStatusEnum
+    device_info: Optional[Dict] = None
 
 
-class PresenceUpdate(PresenceBase):
+class PresenceCreate(PresenceBase):
     pass
 
 
-class PresenceRead(PresenceBase):
+class PresenceUpdate(BaseModel):
+    status: Optional[PresenceStatusEnum] = None
+    device_info: Optional[Dict] = None
+    last_seen: Optional[datetime] = None
+
+
+class PresenceRead(BaseModel):
+    device_info: Optional[Dict] = None
+    status: PresenceStatusEnum
     user_id: uuid.UUID
     last_seen: datetime
 
     class Config:
         from_attributes = True
+

@@ -35,6 +35,10 @@ class Users(SQLModel, table=True):
         index=True,
         nullable=False
     )
+    email_verified: bool = Field(default=False, nullable=False, sa_column_kwargs={"server_default": "false"})
+    phone_verified: bool = Field(default=False, nullable=False, sa_column_kwargs={"server_default": "false"})
+    mfa: bool = Field(default=False, nullable=True, sa_column_kwargs={"server_default": "false"})
+    mfa_code: str = Field(default=None, nullable=True, sa_column_kwargs={"server_default": "null"})
     referred_by_id: Optional[uuid.UUID] = Field(default=None, foreign_key="users.id")
 
     referrer: Optional["Users"] = Relationship(
@@ -52,7 +56,7 @@ class Users(SQLModel, table=True):
     )
     locations: list["Locations"] = Relationship(back_populates="user")
     profile: 'Profile' = Relationship(back_populates='user')
-    wallet : 'Wallet' = Relationship(back_populates='user')
+    wallet : list['Wallet'] = Relationship(back_populates='user')
     transactions: list["Transaction"] = Relationship(back_populates="user")
     portfolios: list["UserPortfolio"] = Relationship(back_populates="user")
     reviews: list["Review"] = Relationship(back_populates="user")
@@ -92,7 +96,10 @@ class Locations(SQLModel, table=True):
     location_type: LocationType = Field(nullable=False)
     lat: float = Field(nullable=False)
     lon: float = Field(nullable=False)
-    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), nullable=False)
+    updated_at: datetime = Field(
+        sa_column=Column(DateTime(timezone=True), nullable=False),
+        default_factory=lambda: datetime.now(timezone.utc),
+    )
     accuracy_meter: float = Field(nullable=False)
     user: Users = Relationship(back_populates="locations")
 
