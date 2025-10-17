@@ -1,14 +1,13 @@
-# app/services/escrow_service.py
 from typing import Optional
-
+from app.services.email_notification_service import NotificationService
 from fastapi import HTTPException
+from jinja2 import Environment, FileSystemLoader
 from sqlalchemy.orm import selectinload
 from sqlmodel.ext.asyncio.session import AsyncSession, Select
 from sqlalchemy import select as sa_select
 from sqlalchemy.exc import SQLAlchemyError
 from datetime import datetime, timezone
 import uuid
-
 from app.models import Users
 from app.repositories.escrow_repo import EscrowRepository
 from app.models.escrow import Escrow, EscrowStatus
@@ -20,11 +19,13 @@ from app.schemas.escrow import EscrowCreate
 from app.schemas.transactions import TransactionCreate
 from app.services.wallet_service import update_user_wallet_service
 from app.repositories.transactions_repo import TransactionRepository
+from app.workers.tasks.email_service_task import send_email_task
 
 class EscrowService:
     def __init__(self, db: AsyncSession):
         self.db = db
         self.repo = EscrowRepository(db)
+        self.notifier = NotificationService()
 
     from sqlalchemy.orm import selectinload
 
@@ -32,7 +33,6 @@ class EscrowService:
         """
         Creates an escrow atomically within a single database transaction.
         """
-        # Step 1: Eagerly load the negotiation and its related users and wallets.
         query = (
             Select(PriceNegotiation)
             .where(PriceNegotiation.id == payload.payment_negotiation_id)
@@ -44,12 +44,10 @@ class EscrowService:
         result = await self.db.exec(query)
         negotiation = result.scalars().first()
 
-        # Step 2: Perform all validation checks upfront.
         if not negotiation:
             raise HTTPException(status_code=404, detail="Price negotiation not found")
 
-        # --- THIS IS THE COMPLETED LOGIC ---
-        # Identify who is the payer and who is the payee.
+
         initiator = negotiation.initiator
         receiver = negotiation.receiver
 
@@ -60,19 +58,15 @@ class EscrowService:
             payer_user = receiver
             payee_user = initiator
         else:
-            # This case should ideally not be hit if the current user is part of the negotiation
             raise HTTPException(status_code=403, detail="Authenticated user is not part of this negotiation.")
 
-        # Extract the first wallet from each user's eagerly loaded list of wallets.
         payer_wallet = payer_user.wallet[1] if payer_user.wallet else None
         payee_wallet = payee_user.wallet[1] if payee_user.wallet else None
-        # --- END OF COMPLETED LOGIC ---
 
         if not payer_wallet or not payee_wallet:
             raise HTTPException(status_code=404, detail="Payer or payee wallet could not be found.")
 
-        # The rest of your validation logic is correct.
-        # Note: The check for `payer_wallet.user_id != user.id` is now redundant because we already established it above, but it's kept for safety.
+
         if payer_wallet.user_id != user.id:
             raise HTTPException(status_code=403, detail="You do not own the payer wallet for this negotiation")
 
@@ -87,14 +81,9 @@ class EscrowService:
         if existing_escrow:
             raise HTTPException(status_code=409, detail="An escrow already exists for this negotiation")
 
-        # Step 3: Begin the atomic transaction to modify the database.
         try:
-            # Action 1: Deduct funds from the payer's wallet.
-            # payer_wallet.balance_cents -= negotiation.proposed_price_cents
-            # self.db.add(payer_wallet)
             await update_user_wallet_balance_repo_ext(self.db, wallet_type=payer_wallet.wallet_type, amount=-negotiation.proposed_price_cents, credentials=payer_user.id)
 
-            # Action 2: Create the debit transaction record.
             execute_transact = TransactionRepository(db=self.db)
             txn_data = TransactionCreate(
                 wallet_id=payer_wallet.id,
@@ -105,8 +94,8 @@ class EscrowService:
                 reference=f"escrow_creation_{negotiation.id}"
             )
             await execute_transact.create_transaction_ext(txn_data)
+            self.notifier.send_escrow_creation_debit(payer_user, negotiation)
 
-            # Action 3: Create the new escrow record.
             new_escrow = Escrow(
                 payer_wallet_id=payer_wallet.id,
                 payee_wallet_id=payee_wallet.id,
@@ -117,18 +106,15 @@ class EscrowService:
             await self.repo.create_ext(escrow=new_escrow)
             await self.db.commit()
 
-            # Commit all three changes as a single, atomic operation.
-
         except Exception as e:
-            # If any of the above actions fail, roll back everything.
             await self.db.rollback()
             raise HTTPException(
                 status_code=500,
                 detail=f"Failed to create escrow due to a database error: {str(e)}"
             )
 
-        # Refresh the new escrow object to load its final state from the DB.
         await self.db.refresh(new_escrow)
+        self.notifier.send_escrow_creation_mail(payer_user, payee_user, escrow=new_escrow)
 
         return new_escrow
 
@@ -136,76 +122,63 @@ class EscrowService:
         """
         Release escrow funds to the payee within a single atomic transaction.
         """
-        # Step 1: Eagerly load the escrow and its related wallets in one async query.
-        # This prevents the MissingGreenlet error by avoiding lazy loading.
         query = (
             Select(Escrow)
             .where(Escrow.id == escrow_id)
             .options(
-                selectinload(Escrow.payee_wallet),
-                selectinload(Escrow.payer_wallet)
+                selectinload(Escrow.payee_wallet).options(selectinload(Wallet.user)),
+                selectinload(Escrow.payer_wallet).options(selectinload(Wallet.user)),
             )
         )
         result = await self.db.exec(query)
         escrow = result.scalars().first()
 
-        # Step 2: Perform validation checks.
         if not escrow:
             raise HTTPException(status_code=404, detail="Escrow not found")
 
         if escrow.status != EscrowStatus.held:
             raise HTTPException(status_code=400, detail="Only held escrows can be released")
 
-        # Use the eagerly loaded relationships.
         payee_wallet = escrow.payee_wallet
         payer_wallet = escrow.payer_wallet
+        payee_user = payee_wallet.user
+        payer_user = payer_wallet.user
 
         if not payee_wallet or not payer_wallet:
             raise HTTPException(status_code=404, detail="Associated wallet not found")
 
-        # Step 3: Check authorization.
         if user.id not in {payer_wallet.user_id, payee_wallet.user_id}:
             raise HTTPException(status_code=403, detail="Not authorized to release this escrow")
 
-        # Step 4: Perform all database modifications within a single transaction.
         try:
-            # Credit the payee's wallet.
             await update_user_wallet_balance_repo_ext(db=self.db, credentials=payee_wallet.user_id, wallet_type=payee_wallet.wallet_type, amount=escrow.amount_cents)
 
-            # Create a transaction record for the credit.
             execute_transact = TransactionRepository(db=self.db)
             txn_data = TransactionCreate(
-                wallet_id=payee_wallet.id,  # The credit goes to the payee's wallet
+                wallet_id=payee_wallet.id,
                 users_id=payee_wallet.user_id,
-                type=TxnType.deposit,  # This is a deposit for the payee
+                type=TxnType.deposit,
                 amount_cents=escrow.amount_cents,
                 status=TxnStatus.completed,
                 reference=f"escrow_release_{escrow.id}"
             )
             await execute_transact.create_transaction_ext(txn_data)
+            self.notifier.send_escrow_release_credit(payee_user, escrow)
 
-            # Update the escrow status to released.
             escrow.status = EscrowStatus.released
             self.db.add(escrow)
-
-            # Commit all changes at once.
             await self.db.commit()
 
         except Exception as e:
-            # If any step fails, roll back the entire transaction.
             await self.db.rollback()
             raise HTTPException(
                 status_code=500,
                 detail=f"Failed to release escrow due to an error: {str(e)}"
             )
 
-        # Refresh the object to get the updated state from the database.
         await self.db.refresh(escrow)
-
-        return escrow
-
-    # return updated escrow
         return await self.repo.get_by_id(escrow_id)
+
 
     async def refund_escrow(self, user, escrow_id: uuid.UUID) -> Escrow:
         """
@@ -223,13 +196,9 @@ class EscrowService:
 
         payer_wallet = escrow.payer_wallet
 
-        # only authorized users (payer or admin) can trigger refund
         if str(user.id) != str(payer_wallet.user_id):
             raise PermissionError("Not authorized to refund this escrow")
 
-        # credit payer back
-        # payer_wallet.balance_cents += escrow.amount_cents
-        # self.db.add(payer_wallet)
         await update_user_wallet_balance_repo_ext(
             db=self.db,
             credentials=payer_wallet.user_id,
@@ -237,7 +206,6 @@ class EscrowService:
             amount=escrow.amount_cents
         )
 
-        # create refund transaction
         execute_transact = TransactionRepository(db=self.db)
         txn = TransactionCreate(
             wallet_id=payer_wallet.id,
@@ -267,7 +235,6 @@ class EscrowService:
         if escrow.status not in (EscrowStatus.held):
             raise ValueError("Only held escrows can be disputed")
 
-        # save status = disputed
         escrow.status = EscrowStatus.disputed
         self.db.add(escrow)
         await self.db.commit()

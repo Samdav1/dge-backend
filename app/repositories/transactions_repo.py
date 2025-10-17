@@ -14,6 +14,7 @@ class TransactionRepository:
         self.db.add(txn)
         await self.db.commit()
         await self.db.refresh(txn)
+
         return txn
 
     async def create_transaction_ext(self, payload: TransactionCreate) -> Transaction:
