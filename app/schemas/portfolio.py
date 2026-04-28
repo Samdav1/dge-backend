@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, HttpUrl
 from typing import Optional, List
 from datetime import datetime
 import uuid
@@ -15,6 +15,11 @@ class UserPortfolioBase(BaseModel):
     description: Optional[str] = None
     category: Optional[str] = None
     visibility: PortfolioVisibility = PortfolioVisibility.public
+    website: Optional[HttpUrl] = None
+    facebook: Optional[HttpUrl] = None
+    twitter: Optional[HttpUrl] = None
+    youtube: Optional[HttpUrl] = None
+    instagram: Optional[HttpUrl] = None
 
 
 class UserPortfolioCreate(UserPortfolioBase):
@@ -26,6 +31,11 @@ class UserPortfolioUpdate(BaseModel):
     description: Optional[str] = None
     category: Optional[str] = None
     visibility: Optional[PortfolioVisibility] = None
+    website: Optional[HttpUrl] = None
+    facebook: Optional[HttpUrl] = None
+    twitter: Optional[HttpUrl] = None
+    youtube: Optional[HttpUrl] = None
+    instagram: Optional[HttpUrl] = None
 
 
 class UserPortfolioRead(UserPortfolioBase):

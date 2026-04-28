@@ -32,13 +32,14 @@ class UserLogin(BaseModel):
 class UserCreate(UserBase):
     password: str
     referral_code: Optional[str]
+    google_auth: bool = False
 
     class Config:
         from_attributes = True
 
 class UserRead(UserBase):
     id: uuid.UUID
-    status : UserStatus
+    status: UserStatus
     referral_code: Optional[str]
 
     class Config:
@@ -53,3 +54,10 @@ class UserToken(BaseModel):
 
 from .profile import *
 UserReadWithProfile.model_rebuild()
+
+class UserGoogleCreate(UserBase):
+    referral_code: Optional[str]
+    google_auth: bool = True
+
+    class Config:
+        from_attributes = True

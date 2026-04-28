@@ -1,10 +1,14 @@
 import uuid
 from datetime import datetime, timezone
 from typing import Optional
+from pydantic import HttpUrl
 
 from sqlalchemy import CheckConstraint, SmallInteger, DateTime
 from sqlmodel import SQLModel, Field, Relationship, Column
 from enum import Enum
+
+from starlette.datastructures import URL
+
 
 class PortfolioVisibility(str, Enum):
     public = "public"
@@ -20,7 +24,7 @@ class UserPortfolio(SQLModel, table=True):
 
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True, index=True)
 
-    user_id: uuid.UUID = Field(foreign_key="users.id", nullable=False, index=True)
+    user_id: uuid.UUID = Field(foreign_key="users.id", nullable=False, index=True, unique=True)
 
     title: str = Field(nullable=False)
     description: Optional[str] = None
@@ -29,6 +33,12 @@ class UserPortfolio(SQLModel, table=True):
     visibility: PortfolioVisibility = Field(
         default=PortfolioVisibility.public, nullable=False
     )
+    facebook: str = Field(nullable=True, unique=True, index=True)
+    twitter: str = Field(nullable=True, unique=True, index=True)
+    youtube: str = Field(nullable=True, unique=True, index=True)
+    instagram: str = Field(nullable=True, unique=True, index=True)
+    website: str = Field(nullable=True, unique=True, index=True)
+
 
     created_at: datetime = Field(
         sa_column=Column(DateTime(timezone=True), nullable=False),

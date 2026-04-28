@@ -44,7 +44,10 @@ async def update_portfolio_repo(portfolio_info: UserPortfolioUpdate, db:AsyncSes
 
     for key, value in portfolio_data.items():
         if hasattr(user_portfolio, key):
-            setattr(user_portfolio, key, value)
+            if key == "visibility":
+                setattr(user_portfolio, key, value)
+            else:
+                setattr(user_portfolio, key, str(value))
 
     try:
         db.add(user_portfolio)
@@ -118,3 +121,23 @@ async def update_media_repo(
         return refined_media
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Cannot Update Media: {str(e)}")
+
+async def get_portfolio_repo(db: AsyncSession, user_id) -> UserPortfolioRead:
+    """
+
+    :param db:
+    :param user_id:
+    :return:
+    """
+    statement = select(UserPortfolio).where(
+        UserPortfolio.user_id == user_id
+    )
+    result = await db.exec(statement)
+    portfolio = result.first()
+    if not portfolio:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Portfolio not found or you do not have permission to access it."
+        )
+    refined_portfolio = UserPortfolioRead.model_validate(portfolio)
+    return refined_portfolio

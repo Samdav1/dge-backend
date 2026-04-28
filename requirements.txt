@@ -25,3 +25,5 @@ python-dotenv~=1.1.1
 APScheduler~=3.11.0
 aiofiles~=24.1.0
 rabbitmq==0.2.0
+celery
+agora-token-builder

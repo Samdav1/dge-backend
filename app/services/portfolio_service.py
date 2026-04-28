@@ -62,3 +62,16 @@ async def update_portfolio_media_service(db: AsyncSession, user_id, media_update
         db=db, user_id=user_id, media_update=media_data
     )
     return PortfolioMediaRead.model_validate(updated_media)
+
+async def get_user_portfolio_service(db: AsyncSession, user_id) -> UserPortfolioRead:
+    """
+
+    :param db:
+    :param user_id:
+    """
+
+    if user_id:
+        portfolio= await portfolio_repo.get_portfolio_repo(db, user_id)
+        return portfolio
+    else:
+        raise HTTPException(status_code=404, detail="User not found")

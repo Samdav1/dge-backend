@@ -1,5 +1,6 @@
 from .team import TeamUsers, Teams, TeamMembership
 from .user import Users, Locations, Admin, RefreshToken
+from .driving import DriverProfile
 from .profile import Profile
 from .kyc import KYC
 from .escrow import Escrow
@@ -54,5 +55,6 @@ __all__ = [
     "ServiceCategory",
     "Notification",
     "RefreshToken",
-    "SuperAdmin"
+    "SuperAdmin",
+    "DriverProfile"
 ]

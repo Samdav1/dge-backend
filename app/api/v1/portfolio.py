@@ -9,7 +9,8 @@ from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.services import portfolio_service
-from app.services.portfolio_service import create_portfolio_service, update_portfolio_service
+from app.services.portfolio_service import create_portfolio_service, update_portfolio_service, \
+    get_user_portfolio_service
 
 router = APIRouter()
 
@@ -77,3 +78,17 @@ async def update_portfolio_media(
     except Exception as error:
         raise HTTPException(status_code= 500, detail=f"Error Updating Portfolio Media, {str(error)}")
     return updated_media
+
+@router.get("/get_user_portfolio", response_model=UserPortfolioRead)
+async def get_user_portfolio(db: AsyncSession = Depends(get_session), current_user: UserRead = Depends(get_current_user)):
+    """
+
+    :param db:
+    :param current_user:
+    """
+
+    if not current_user.id:
+        raise HTTPException(status_code=401, detail="Invalid credentials")
+    else:
+        user_portfolio = await get_user_portfolio_service(db, current_user.id)
+        return user_portfolio

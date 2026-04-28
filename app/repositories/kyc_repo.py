@@ -5,10 +5,10 @@ from fastapi import HTTPException
 from app.models.kyc import KYC
 from app.schemas.kyc import KYCStatus, KYCRead, KYCCreate, KYCUpdate
 
-async def create_user_repo_kyc(db: AsyncSession, kyc_userid) ->KYCRead:
-    if not kyc_userid:
+async def create_user_repo_kyc(db: AsyncSession, kyc) ->KYCRead:
+    if not kyc:
         raise HTTPException(status_code=404, detail="User not found")
-    user_kyc = KYC(user_id=kyc_userid)
+    user_kyc = KYC(**kyc.model_dump())
     try:
         db.add(user_kyc)
         await db.commit()

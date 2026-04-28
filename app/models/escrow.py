@@ -1,6 +1,8 @@
 import uuid
+from datetime import datetime, timezone
+
 from sqlmodel import SQLModel, Field, Column, ForeignKey, Relationship
-from sqlalchemy import Enum, BigInteger
+from sqlalchemy import Enum, BigInteger, DateTime
 import enum
 
 
@@ -50,3 +52,12 @@ class Escrow(SQLModel, table=True):
     price_negotiation: 'PriceNegotiation' = Relationship(back_populates="escrow")
     submissions: "WorkSubmission" = Relationship(back_populates="escrow")
 
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+        sa_column=Column(DateTime(timezone=True),
+                         nullable=False))
+
+    updated_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+        sa_column=Column(DateTime(timezone=True), onupdate=lambda: datetime.now(timezone.utc), nullable=False)
+    )

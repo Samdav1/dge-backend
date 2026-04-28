@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.repositories.services_repo import ServiceRepository
 from app.schemas.services import ServiceCreate, ServiceUpdate
 from app.models.services import Service
-from app.dependencies.file_handler import save_avatar
+from app.dependencies.file_handler import save_service_image, save_avatar
 from app.schemas.user import UserRead
 
 
@@ -31,7 +31,7 @@ class ServiceService:
         if image:
             if image.content_type not in ALLOWED_IMAGE_MIMES:
                 raise HTTPException(status_code=400, detail="Unsupported image type")
-            image_path = await save_avatar(image)
+            image_path = await save_service_image(image)
 
         service = Service(
             name=payload.name,
@@ -51,7 +51,7 @@ class ServiceService:
     async def list_services(self, *, user_id=None, status=None, type=None) -> List[Service]:
         return await self.repo.list(user_id=user_id, status=status, type=type)
 
-    async def get_service(self, service_id: uuid.UUID) -> Service:
+    async def get_service(self, service_id: uuid.UUID):
         service = await self.repo.get(service_id)
         if not service:
             raise HTTPException(status_code=404, detail="Service not found")
@@ -65,10 +65,11 @@ class ServiceService:
             payload: ServiceUpdate,
             image: Optional[UploadFile] = None,
     ) -> Service:
-        service = await self.repo.get(service_id)
-        if not service:
+        result = await self.repo.get(service_id)
+        if not result:
             raise HTTPException(status_code=404, detail="Service not found")
 
+        service = result["service"]
         if service.user_id != user.id:
             raise HTTPException(status_code=403, detail="You are not allowed to modify this service")
 
@@ -80,16 +81,17 @@ class ServiceService:
             service.image = new_path
 
         update_data = payload.model_dump(exclude_unset=True)
-        category_ids = update_data.pop("category_id", None)
+        category_ids = update_data.pop("category_ids", None)
         for k, v in update_data.items():
             setattr(service, k, v)
 
         return await self.repo.update(service, category_ids)
 
     async def delete_service(self, service_id: uuid.UUID, user: UserRead) -> None:
-        service = await self.repo.get(service_id)
-        if not service:
+        result = await self.repo.get(service_id)
+        if not result:
             raise HTTPException(status_code=404, detail="Service not found")
+        service = result["service"]
         if service.user_id != user.id:
             raise HTTPException(status_code=403, detail="Not your service")
         await self.repo.delete(service)

@@ -181,3 +181,83 @@ class NotificationService:
             subject=subject,
             context=email_context
         )
+
+    def send_price_negotiation_offer(self, receiver: Users, initiator: Users, negotiation: PriceNegotiation):
+        """
+        Notifies a user that they have received a new price negotiation offer for their service.
+        """
+
+        subject = f"An Opportunity Awaits!🌟 You've Received a New Offer from {initiator.username}"
+
+        amount_formatted = f"${negotiation.proposed_price_cents / 100:.2f}"
+
+        email_context = {
+            'title': f"A New Connection is Forming, {receiver.username}!",
+            'name': receiver.username,
+            'body': (
+                f"<p>Your unique talent has caught someone's eye! 🌟</p>"
+                f"<p><strong>{initiator.username}</strong> is excited by what you offer and has reached out with a proposal of <strong>{amount_formatted}</strong>.</p>"
+                "<p>This is more than a transaction; it's the start of a potential collaboration. Every great project begins with a conversation, and yours is waiting to begin.</p>"
+            ),
+            'cta_text': "Review Your Offer & Respond",
+            'cta_link': f"#"
+        }
+
+        self._render_and_dispatch(
+            template_name='email_template.html',
+            recipient_email=[receiver.email],
+            subject=subject,
+            context=email_context
+        )
+
+    def send_verification_email(self, new_user: UserRead, token: str):
+        """
+        Sends the email verification link to a new user.
+        """
+        verification_link = f"https://your-api.com/v1/users/verify-email?token={token}"
+
+        subject = "Welcome to DGE World! Please Verify Your Email"
+
+        email_context = {
+            'title': f"One Last Step, {new_user.username}!",
+            'name': new_user.username,
+            'body': (
+                "<p>We are so excited to have you join our community. To complete your registration, please verify your email address by clicking the button below.</p>"
+                "<p>This link is valid for 1 hour.</p>"
+            ),
+            'cta_text': "Verify My Email",
+            'cta_link': verification_link
+        }
+
+        self._render_and_dispatch(
+            template_name='email_template.html',
+            recipient_email=[str(new_user.email)],
+            subject=subject,
+            context=email_context
+        )
+
+    def send_verification_success_email(self, user: UserRead):
+        """
+        Sends a friendly email to a user after they have successfully verified their email.
+        """
+
+        subject = "You're Verified! Welcome to DGE World 🎉"
+
+        email_context = {
+            'title': f"All Set, {user.username}!",
+            'name': user.username,
+            'body': (
+                "<p>Great news! Your email is officially verified, and your account is now fully active and secure. ✅</p>"
+                "<p>You're all set to explore DGE World, a community built on trust and unique connections. We're so excited to have you with us.</p>"
+                "<p>Ready to dive in?</p>"
+            ),
+            'cta_text': "Go to Your Dashboard",
+            'cta_link': "https://your-frontend.com/dashboard"
+        }
+
+        self._render_and_dispatch(
+            template_name='email_template.html',
+            recipient_email=[str(user.email)],
+            subject=subject,
+            context=email_context
+        )

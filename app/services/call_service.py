@@ -18,6 +18,8 @@ class CallService:
             initiator_id=initiator_id,
             call_type=payload.call_type,
             status=CallStatusEnum.initiated,
+            # Store Agora channel name in the existing signaling_metadata JSON column
+            signaling_metadata={"channel_name": payload.channel_name},
         )
         await self.repo.create_session(new_call)
         return new_call

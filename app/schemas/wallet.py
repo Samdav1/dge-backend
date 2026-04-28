@@ -23,7 +23,6 @@ class WalletUpdate(BaseModel):
 
 class WalletRead(WalletBase):
     id: uuid.UUID
-    user_id: uuid.UUID
-
+    
     class Config:
         from_attributes = True

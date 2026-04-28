@@ -6,7 +6,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from app.db.session import get_session
 from app.repositories.services_repo import ServiceRepository
 from app.services.services_service import ServiceService
-from app.schemas.services import ServiceCreate, ServiceRead, ServiceUpdate
+from app.schemas.services import ServiceCreate, ServiceRead, ServiceUpdate, ServiceList
 from app.schemas.user import UserRead
 from app.dependencies.auth import get_current_user
 
@@ -65,7 +65,7 @@ async def create_service(
     return created
 
 
-@router.get("/", response_model=List[ServiceRead])
+@router.get("/", response_model=List[ServiceList])
 async def list_services(
         status: Optional[str] = None,
         type: Optional[str] = None,
@@ -82,7 +82,7 @@ async def list_services(
     return results
 
 
-@router.get("/{service_id}", response_model=ServiceRead)
+@router.get("/{service_id}")
 async def get_service(
         service_id: uuid.UUID,
         service: ServiceService = Depends(get_service_service),

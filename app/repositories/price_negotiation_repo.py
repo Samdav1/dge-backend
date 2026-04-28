@@ -1,7 +1,10 @@
+from fastapi import HTTPException
 from sqlmodel.ext.asyncio.session import AsyncSession
 from sqlmodel import select
 from typing import List, Optional
 import uuid
+
+from app.models import Users
 from app.models.price_negotiation import PriceNegotiation
 from app.schemas.price_negotiation import PriceNegotiationRead, NegotiationType
 
@@ -46,3 +49,11 @@ class PriceNegotiationRepository:
         await self.db.commit()
         await self.db.refresh(negotiation)
         return negotiation
+
+    async def get_user_by_id(self, user_id):
+        stmt = select(Users).where(Users.id == user_id)
+        result = await self.db.exec(stmt)
+        user = result.first()
+        if user is None:
+            raise HTTPException(status_code=404, detail="User not found")
+        return user

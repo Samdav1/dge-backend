@@ -186,7 +186,7 @@ class EscrowService:
         - only allowed when escrow is 'held'
         - lock rows, credit payer wallet, create transaction, update escrow.status
         """
-        qe = Select(Escrow).where(Escrow.id == escrow_id).options(selectinload(Escrow.payer_wallet))
+        qe = Select(Escrow).where(Escrow.id == escrow_id).options(selectinload(Escrow.payer_wallet).options(selectinload(Wallet.user)))
         rese = await self.db.exec(qe)
         escrow = rese.scalars().first()
         if not escrow:
@@ -195,6 +195,7 @@ class EscrowService:
             raise ValueError("Only held escrows can be refunded")
 
         payer_wallet = escrow.payer_wallet
+        payer = payer_wallet.user
 
         if str(user.id) != str(payer_wallet.user_id):
             raise PermissionError("Not authorized to refund this escrow")
@@ -219,23 +220,31 @@ class EscrowService:
         escrow.status = EscrowStatus.refunded
         self.db.add(escrow)
         await self.db.commit()
-
-        return await self.repo.get_by_id(escrow_id)
+        await self.db.refresh(escrow)
+        self.notifier.send_escrow_refund_mail(payer, escrow)
+        return escrow
 
     async def dispute_escrow(self, user, escrow_id: uuid.UUID) -> Escrow:
         """
         Mark an escrow as disputed (no funds move).
         Only the payer, payee, or staff/admin should be able to call this.
         """
-        qe = Select(Escrow).where(Escrow.id == escrow_id)
+        qe = Select(Escrow).where(Escrow.id == escrow_id).options(
+            selectinload(Escrow.payer_wallet).options(selectinload(Wallet.user)),
+            selectinload(Escrow.payee_wallet).options(selectinload(Wallet.user))
+        )
         rese = await self.db.exec(qe)
         escrow = rese.scalars().first()
         if not escrow:
             raise ValueError("Escrow not found")
-        if escrow.status not in (EscrowStatus.held):
+        if escrow.status not in EscrowStatus.held:
             raise ValueError("Only held escrows can be disputed")
 
         escrow.status = EscrowStatus.disputed
+        payer = escrow.payer_wallet.user
+        payee = escrow.payee_wallet.user
         self.db.add(escrow)
         await self.db.commit()
-        return await self.repo.get_by_id(escrow_id)
+        await self.db.refresh(escrow)
+        self.notifier.send_escrow_dispute_mail(payer=payer, payee=payee, escrow=escrow)
+        return escrow

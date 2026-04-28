@@ -11,7 +11,7 @@ api_key_header = APIKeyHeader(name=API_KEY_NAME, auto_error=False)
 
 VALID_API_KEYS = os.getenv("API_KEY")
 
-def get_api_key(api_key: str = Security(api_key_header) ):
+def get_api_key(api_key: str = Security(api_key_header)):
     if api_key != VALID_API_KEYS:
         raise HTTPException(status_code=401, detail="Invalid API Key")
     return api_key

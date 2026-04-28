@@ -39,7 +39,7 @@ class ConversationBase(BaseModel):
 
 
 class ConversationCreate(ConversationBase):
-    created_by: uuid.UUID
+    recipient_id: Optional[uuid.UUID] = None
 
 
 class ConversationUpdate(BaseModel):

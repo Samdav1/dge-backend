@@ -37,10 +37,11 @@ async def get_my_negotiations(
 async def update_negotiation(
     negotiation_id: uuid.UUID,
     payload: PriceNegotiationUpdate,
+    current_user: UserRead = Depends(get_current_user),
     db: AsyncSession = Depends(get_session)
 ):
     service = PriceNegotiationService(PriceNegotiationRepository(db))
     try:
-        return await service.update(negotiation_id, payload)
+        return await service.update(negotiation_id, payload, db, current_user)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))

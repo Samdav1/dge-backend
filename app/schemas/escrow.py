@@ -14,10 +14,8 @@ class EscrowStatusStr(str, Enum):
 
 class EscrowCreate(BaseModel):
     payment_negotiation_id: uuid.UUID
-    payer_wallet_id: uuid.UUID
-    payee_wallet_id: uuid.UUID
     amount_cents: int = Field(..., ge=0)
-    reference: Optional[str] = None   # optional idempotency / reference token
+    reference: Optional[str] = None
 
 
 class EscrowRead(BaseModel):

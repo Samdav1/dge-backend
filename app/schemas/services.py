@@ -1,8 +1,11 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, AliasPath, Field
 from typing import Optional, List
 import uuid
 from datetime import datetime
 from app.models.services import ServiceType, ServiceStatus
+from app.schemas.portfolio import UserPortfolioRead
+from app.schemas.profile import ProfileRead
+from app.schemas.user import UserRead, UserReadWithProfile
 
 
 class CategoryRead(BaseModel):
@@ -53,6 +56,22 @@ class ServiceRead(BaseModel):
     image_alt: Optional[str] = None
     created_at: datetime
     categories: List[CategoryRead] = []
+
+    class Config:
+        from_attributes = True
+
+class ServiceList(ServiceRead):
+    user: UserRead
+
+    portfolio: Optional[List[UserPortfolioRead]] = Field(
+        default=None,
+        validation_alias=AliasPath('user', 'portfolios')
+    )
+
+    profile: Optional[ProfileRead] = Field(
+        default=None,
+        validation_alias=AliasPath('user', 'profile')
+    )
 
     class Config:
         from_attributes = True

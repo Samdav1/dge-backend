@@ -15,6 +15,8 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 router = APIRouter(prefix="/chat", tags=["chat"])
 manager = ConnectionManager()
 
+from app.repositories.conversation_repo import get_user_conversations
+
 @router.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket, token: str = Query(None), db: AsyncSession = Depends(get_session)):
     """
@@ -30,6 +32,11 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(None), db:
 
     # register socket for this user
     await manager.connect(user_id, websocket)
+
+    # auto-join user to all their conversations so they receive global notifications (e.g. calls)
+    user_convos = await get_user_conversations(user.id, db)
+    for c in user_convos:
+        await manager.join_conversation(str(c.id), user_id)
 
     try:
         while True:
@@ -65,6 +72,7 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(None), db:
                 conv = payload.get("conversation_id")
                 content = payload.get("content")
                 ctype = payload.get("content_type", "text")
+                metadata_info = payload.get("metadataInfo", {})
 
                 if not conv or not content:
                     await websocket.send_text(json.dumps({"error": "conversation_id and content required"}))
@@ -77,7 +85,8 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(None), db:
                     conversation_id=conv,
                     sender_id=user.id,
                     content=content,
-                    content_type=ctype
+                    content_type=ctype,
+                    metadataInfo=metadata_info
                 )
                 saved = await service.create_message(msg_payload)
 
@@ -91,12 +100,53 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(None), db:
                         "content": saved.content,
                         "content_type": saved.content_type,
                         "created_at": saved.created_at.isoformat(),
-                        "status": saved.status
+                        "status": saved.status,
+                        "metadataInfo": saved.metadataInfo
                     }
                 }
                 await manager.broadcast_conversation(str(conv), out)
-            #     break  # we used the session and committed; break the async for
-            # continue
+
+            if action == "call_invite":
+                conv = payload.get("conversation_id")
+                channel_name = payload.get("channel_name")
+                if conv and channel_name:
+                    # Broadcast call invite to all participants in the conversation
+                    invite_msg = {
+                        "action": "call_invite",
+                        "conversation_id": conv,
+                        "channel_name": channel_name,
+                        "caller_name": getattr(user, "username", None) or str(user.id),
+                        "caller_avatar": "",
+                        "user_id": user_id,
+                    }
+                    await manager.broadcast_conversation(str(conv), invite_msg)
+                continue
+
+            if action == "call_reject":
+                conv = payload.get("conversation_id")
+                channel_name = payload.get("channel_name", "")
+                if conv:
+                    reject_msg = {
+                        "action": "call_reject",
+                        "conversation_id": conv,
+                        "channel_name": channel_name,
+                        "user_id": user_id,
+                    }
+                    await manager.broadcast_conversation(str(conv), reject_msg)
+                continue
+
+            if action == "call_accept":
+                conv = payload.get("conversation_id")
+                channel_name = payload.get("channel_name", "")
+                if conv:
+                    accept_msg = {
+                        "action": "call_accept",
+                        "conversation_id": conv,
+                        "channel_name": channel_name,
+                        "user_id": user_id,
+                    }
+                    await manager.broadcast_conversation(str(conv), accept_msg)
+                continue
 
             # unknown action: ignore
     except WebSocketDisconnect:
