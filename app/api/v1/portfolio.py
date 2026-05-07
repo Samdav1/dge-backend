@@ -1,7 +1,7 @@
 from starlette import status
 
 from app.db.session import get_session
-from app.schemas.portfolio import UserPortfolioRead, UserPortfolioCreate, UserPortfolioUpdate, PortfolioMediaRead, \
+from app.schemas.portfolio import UserPortfolioRead, UserPortfolioWithMediaRead, UserPortfolioCreate, UserPortfolioUpdate, PortfolioMediaRead, \
     PortfolioMediaUpdate
 from app.schemas.user import UserRead
 from app.dependencies.auth import get_current_user
@@ -79,7 +79,7 @@ async def update_portfolio_media(
         raise HTTPException(status_code= 500, detail=f"Error Updating Portfolio Media, {str(error)}")
     return updated_media
 
-@router.get("/get_user_portfolio", response_model=UserPortfolioRead)
+@router.get("/get_user_portfolio", response_model=UserPortfolioWithMediaRead)
 async def get_user_portfolio(db: AsyncSession = Depends(get_session), current_user: UserRead = Depends(get_current_user)):
     """
 

@@ -59,11 +59,16 @@ class SuperAdminRead(BaseModel):
     created_at: datetime
     updated_at: Optional[datetime] = None
     last_login_at: Optional[datetime] = None
+    # Notification / security preferences
+    email_notifs: bool = True
+    push_notifs: bool = True
+    security_alerts: bool = False
 
     class Config:
         from_attributes = True
 
 class SuperAdminLoginRead(BaseModel):
+    id: UUID
     name: str
     email: EmailStr
     phone_number: Optional[str] = None

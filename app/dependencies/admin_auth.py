@@ -1,3 +1,4 @@
+from typing import Optional
 from app.core.security import decode_access_token, decode_refresh_token, get_access_token
 from app.repositories.user_repo import get_user_by_id
 from app.schemas.super_admin import SuperAdminRead
@@ -11,15 +12,17 @@ from fastapi import HTTPException
 from jose import JWTError
 from app.services.auth_service import rotate_refresh_token
 
-security = HTTPBearer()
+security = HTTPBearer(auto_error=False)
 repo = SuperAdminRepository()
 
 async def get_current_admin(
         request: Request,
         response: Response,
-        token: str = Depends(security),
+        token: Optional[str] = Depends(security),
         db: AsyncSession = Depends(get_session)
 ):
+    if not token:
+        raise HTTPException(status_code=401, detail="Authentication token is missing")
     try:
         payload = await decode_access_token(token.credentials)
         user_id = payload.get("sub")
@@ -57,7 +60,7 @@ async def get_current_admin(
             admin = await repo.get_by_id(admin_id=admin_user, session=db)
             if not admin:
                 raise HTTPException(status_code=404, detail="Admin not found")
-            new_access_token = get_access_token(str(admin.id))
+            new_access_token = await get_access_token(str(admin.id))
             request.state.new_access_token = new_access_token
             refined_admin = SuperAdminRead.model_validate(admin)
             return refined_admin
@@ -65,11 +68,47 @@ async def get_current_admin(
             raise HTTPException(status_code=401, detail="Refresh token expired or not provided. Please Login Again")
 
 async def get_current_user_ws(token: str, db: AsyncSession):
-    token = await decode_access_token(token)
-    if not token:
-        raise HTTPException(status_code=401, detail="Invalid access token")
-    user = token.get("sub")
-    user_ifo = await get_user_by_id(user, db)
+    try:
+        payload = await decode_access_token(token)
+    except Exception:
+        return None
+        
+    if not payload:
+        return None
+    
+    user_id = payload.get("sub")
+    if not user_id:
+        return None
+        
+    # Ensure user_id is a UUID
+    from uuid import UUID
+    try:
+        uid = UUID(user_id) if isinstance(user_id, str) else user_id
+    except ValueError:
+        return None
+
+    # Try Users table
+    from app.repositories.user_repo import get_user_by_id
     from app.schemas.user import UserRead
-    refined_user = UserRead.model_validate(user_ifo)
-    return refined_user
+    try:
+        user_info = await get_user_by_id(uid, db)
+        if user_info:
+            return UserRead.model_validate(user_info)
+    except Exception:
+        pass
+        
+    # Try SuperAdmin table
+    from app.repositories.super_admin_repo import SuperAdminRepository
+    from app.schemas.user import UserStatus
+    admin_repo = SuperAdminRepository()
+    admin = await admin_repo.get_by_id(session=db, admin_id=uid)
+    if admin:
+        return UserRead(
+            id=admin.id,
+            email=admin.email,
+            username=admin.name,
+            status=UserStatus.active,
+            referral_code=None
+        )
+        
+    return None

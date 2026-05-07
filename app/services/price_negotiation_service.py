@@ -6,17 +6,23 @@ from app.models.price_negotiation import PriceNegotiation, NegotiationType
 from app.schemas.escrow import EscrowCreate
 from app.schemas.price_negotiation import PriceNegotiationCreate, PriceNegotiationUpdate
 from app.repositories.price_negotiation_repo import PriceNegotiationRepository
-from app.services.email_notification_service import NotificationService
+from app.services.email_notification_service import NotificationService as EmailNotificationService
 from app.services.escrow_service import EscrowService
 from app.schemas.user import UserRead
 
 from app.dependencies.generator import generate_tx_ref
 
+from app.services.notifications_service import NotificationService as InAppNotificationService
+from app.repositories.notifications_repo import NotificationRepository
+from app.schemas.notifications import NotificationCreate
+from app.models.notifications import NotificationType
+from app.websocket_endpoints.chat_ws import manager
+
 
 class PriceNegotiationService:
     def __init__(self, repo: PriceNegotiationRepository):
         self.repo = repo
-        self.notification_service = NotificationService()
+        self.notification_service = EmailNotificationService()
 
     async def create(self, payload: PriceNegotiationCreate, initiator_id: uuid.UUID) -> PriceNegotiation:
         negotiation_data = PriceNegotiation(
@@ -40,6 +46,31 @@ class PriceNegotiationService:
             initiator=initiator,
             negotiation=created_negotiation
         )
+
+        in_app_service = InAppNotificationService(NotificationRepository(self.repo.db))
+        notification_data = NotificationCreate(
+            user_id=payload.receiver_id,
+            price_negotiation_id=created_negotiation.id,
+            type=NotificationType.general,
+            message=f"You have received a new price negotiation offer for ${payload.proposed_price_cents / 100:.2f}.",
+            metadataInfo={"negotiation_id": str(created_negotiation.id)}
+        )
+        notif = await in_app_service.create_notification(notification_data, initiator_id)
+
+        await manager.send_to_user(str(payload.receiver_id), {
+            "action": "notification",
+            "notification": {
+                "id": str(notif.id),
+                "type": notif.type.value,
+                "message": notif.message,
+                "created_at": notif.created_at.isoformat()
+            }
+        })
+        await manager.send_to_user(str(payload.receiver_id), {
+            "action": "negotiation_updated",
+            "negotiation_id": str(created_negotiation.id)
+        })
+
         return created_negotiation
 
     async def get_for_user(self, user_id: uuid.UUID):
@@ -65,5 +96,45 @@ class PriceNegotiationService:
                 reference=tx_reference,
             )
             await escrow_service.create_escrow(user=user, payload=new_escrow)
+
+        if payload.status:
+            if payload.status == "accepted":
+                notif_type = NotificationType.offer_accepted
+                msg = "Your price negotiation was accepted."
+            elif payload.status == "rejected":
+                notif_type = NotificationType.offer_rejected
+                msg = "Your price negotiation was rejected."
+            elif payload.status == "countered":
+                notif_type = NotificationType.general
+                msg = f"You received a counter offer for ${payload.proposed_price_cents / 100:.2f}." if payload.proposed_price_cents else "You received a counter offer."
+            else:
+                notif_type = NotificationType.general
+                msg = "Your price negotiation was updated."
+
+            target_user_id = negotiation.initiator_id if user.id == negotiation.receiver_id else negotiation.receiver_id
+
+            in_app_service = InAppNotificationService(NotificationRepository(db))
+            notification_data = NotificationCreate(
+                user_id=target_user_id,
+                price_negotiation_id=negotiation.id,
+                type=notif_type,
+                message=msg,
+                metadataInfo={"negotiation_id": str(negotiation.id)}
+            )
+            notif = await in_app_service.create_notification(notification_data, user.id)
+
+            await manager.send_to_user(str(target_user_id), {
+                "action": "notification",
+                "notification": {
+                    "id": str(notif.id),
+                    "type": notif.type.value,
+                    "message": notif.message,
+                    "created_at": notif.created_at.isoformat()
+                }
+            })
+            await manager.send_to_user(str(target_user_id), {
+                "action": "negotiation_updated",
+                "negotiation_id": str(negotiation.id)
+            })
 
         return result

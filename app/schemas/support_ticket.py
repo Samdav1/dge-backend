@@ -21,6 +21,7 @@ class SupportTicketUpdate(BaseModel):
     status: Optional[SupportTicketStatus] = None
     priority: Optional[SupportTicketPriority] = None
     assigned_to: Optional[UUID] = None
+    assigned_admin_id: Optional[UUID] = None
 
 
 class SupportTicketRead(SupportTicketBase):
@@ -30,6 +31,8 @@ class SupportTicketRead(SupportTicketBase):
     status: SupportTicketStatus
     created_at: datetime
     updated_at: datetime
+    assigned_admin_id: Optional[UUID] = None
+    user_name: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -44,12 +47,15 @@ class SupportTicketReplyCreate(SupportTicketReplyBase):
     ticket_id: UUID
     author_user_id: Optional[UUID] = None
     author_team_user_id: Optional[UUID] = None
+    author_admin_id: Optional[UUID] = None
 
 
 class SupportTicketReplyRead(SupportTicketReplyBase):
     id: UUID
     ticket_id: UUID
     created_at: datetime
+    author_admin_id: Optional[UUID] = None
+    author_name: Optional[str] = None
 
     class Config:
         from_attributes = True

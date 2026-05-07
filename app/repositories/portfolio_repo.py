@@ -129,7 +129,7 @@ async def get_portfolio_repo(db: AsyncSession, user_id) -> UserPortfolioRead:
     :param user_id:
     :return:
     """
-    statement = select(UserPortfolio).where(
+    statement = select(UserPortfolio).options(selectinload(UserPortfolio.media_files)).where(
         UserPortfolio.user_id == user_id
     )
     result = await db.exec(statement)

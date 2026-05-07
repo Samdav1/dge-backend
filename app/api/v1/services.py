@@ -10,7 +10,7 @@ from app.schemas.services import ServiceCreate, ServiceRead, ServiceUpdate, Serv
 from app.schemas.user import UserRead
 from app.dependencies.auth import get_current_user
 
-router = APIRouter(prefix="/services",)
+router = APIRouter()
 
 
 def get_service_service(db: AsyncSession = Depends(get_session)) -> ServiceService:

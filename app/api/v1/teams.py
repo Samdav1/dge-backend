@@ -12,7 +12,7 @@ from app.schemas.team import (
     TeamMembershipCreate, TeamMembershipRead
 )
 
-router = APIRouter(prefix="/teams", )
+router = APIRouter(prefix="", )
 
 
 # ---------------- TEAM ----------------
@@ -22,7 +22,7 @@ async def create_team(payload: TeamCreate, db: AsyncSession = Depends(get_sessio
     return await service.create_team(payload)
 
 
-@router.get("/{team_id}", response_model=TeamRead)
+@router.get("/{team_id:uuid}", response_model=TeamRead)
 async def get_team(team_id: UUID, db: AsyncSession = Depends(get_session)):
     service = TeamService(TeamRepository(db))
     team = await service.get_team(team_id)
@@ -37,7 +37,7 @@ async def get_teams(db: AsyncSession = Depends(get_session)):
     return await service.get_teams()
 
 
-@router.put("/{team_id}", response_model=TeamRead)
+@router.put("/{team_id:uuid}", response_model=TeamRead)
 async def update_team(team_id: UUID, payload: TeamUpdate, db: AsyncSession = Depends(get_session)):
     service = TeamService(TeamRepository(db))
     try:
@@ -46,13 +46,14 @@ async def update_team(team_id: UUID, payload: TeamUpdate, db: AsyncSession = Dep
         raise HTTPException(status_code=404, detail="Team not found")
 
 
-@router.delete("/{team_id}")
+@router.delete("/{team_id:uuid}")
 async def delete_team(team_id: UUID, db: AsyncSession = Depends(get_session)):
     service = TeamService(TeamRepository(db))
     try:
         return await service.delete_team(team_id)
     except NoResultFound:
         raise HTTPException(status_code=404, detail="Team not found")
+
 
 
 # ---------------- TEAM USERS ----------------
@@ -62,7 +63,7 @@ async def create_team_user(payload: TeamUserCreate, db: AsyncSession = Depends(g
     return await service.create_team_user(payload)
 
 
-@router.get("/users/{user_id}", response_model=TeamUserRead)
+@router.get("/users/{user_id:uuid}", response_model=TeamUserRead)
 async def get_team_user(user_id: UUID, db: AsyncSession = Depends(get_session)):
     service = TeamService(TeamRepository(db))
     user = await service.get_team_user(user_id)
@@ -77,7 +78,7 @@ async def get_team_users(db: AsyncSession = Depends(get_session)):
     return await service.get_team_users()
 
 
-@router.put("/users/{user_id}", response_model=TeamUserRead)
+@router.put("/users/{user_id:uuid}", response_model=TeamUserRead)
 async def update_team_user(user_id: UUID, payload: TeamUserUpdate, db: AsyncSession = Depends(get_session)):
     service = TeamService(TeamRepository(db))
     try:
@@ -86,13 +87,14 @@ async def update_team_user(user_id: UUID, payload: TeamUserUpdate, db: AsyncSess
         raise HTTPException(status_code=404, detail="User not found")
 
 
-@router.delete("/users/{user_id}")
+@router.delete("/users/{user_id:uuid}")
 async def delete_team_user(user_id: UUID, db: AsyncSession = Depends(get_session)):
     service = TeamService(TeamRepository(db))
     try:
         return await service.delete_team_user(user_id)
     except NoResultFound:
         raise HTTPException(status_code=404, detail="User not found")
+
 
 
 # ---------------- MEMBERSHIP ----------------

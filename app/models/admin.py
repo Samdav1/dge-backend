@@ -12,6 +12,19 @@ class AdminRank(str, Enum):
     Minor = "Minor"
     Super = "Super"
     Inspector = "Inspector"
+    Support = "Support"
+    Manager = "Manager"
+    Developer = "Developer"
+    Designer = "Designer"
+    Analyst = "Analyst"
+    Tester = "Tester"
+    Product_Owner = "Product Owner"
+    Data_Scientist = "Data Scientist"
+    Marketer = "Marketer"
+    UX_Researcher = "UX Researcher"
+    System_Admin = "System Admin"
+    Content_Strategist = "Content Strategist"
+    Business_Analyst = "Business Analyst"
 
 
 class AdminStatus(str, Enum):
@@ -56,3 +69,32 @@ class SuperAdmin(SQLModel, table=True):
     )
     avatar: str = Field(default=None, nullable=False)
     updated_by: Optional[uuid.UUID] = Field(default=None, foreign_key="admin.id")
+    
+    # Notification Preferences
+    email_notifs: bool = Field(default=True, nullable=False)
+    push_notifs: bool = Field(default=True, nullable=False)
+    security_alerts: bool = Field(default=False, nullable=False)
+
+class AdminSessionStatus(str, Enum):
+    CURRENT = "CURRENT"
+    ACTIVE = "ACTIVE"
+    EXPIRED = "EXPIRED"
+    REVOKED = "REVOKED"
+
+class AdminSession(SQLModel, table=True):
+    __tablename__ = "admin_sessions"
+
+    id: uuid.UUID = Field(primary_key=True, default_factory=uuid.uuid4)
+    admin_id: uuid.UUID = Field(foreign_key="superadmin.id", nullable=False)
+    device: str = Field(nullable=False)
+    location: Optional[str] = Field(default=None)
+    ip_address: str = Field(nullable=False)
+    status: AdminSessionStatus = Field(default=AdminSessionStatus.CURRENT, nullable=False)
+    last_activity: datetime = Field(
+        sa_column=Column(DateTime(timezone=True), nullable=False),
+        default_factory=lambda :datetime.now(timezone.utc)
+    )
+    created_at: datetime = Field(
+        sa_column=Column(DateTime(timezone=True), nullable=False),
+        default_factory=lambda :datetime.now(timezone.utc)
+    )

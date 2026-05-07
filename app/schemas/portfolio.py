@@ -44,11 +44,11 @@ class UserPortfolioRead(UserPortfolioBase):
     created_at: datetime
     updated_at: datetime
 
-    # media_files: List["PortfolioMediaRead"] = []
-    # reviews: List["ReviewRead"] = []
-
     class Config:
         from_attributes = True
+
+class UserPortfolioWithMediaRead(UserPortfolioRead):
+    media_files: Optional[List["PortfolioMediaRead"]] = None
 
 class PortfolioMediaBase(BaseModel):
     media_type: str

@@ -41,6 +41,11 @@ class SuperAdminService:
         if existing:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Email already exists")
 
+        if phone_number:
+            existing_phone = await self.repo.get_by_phone(session, phone_number)
+            if existing_phone:
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Phone number already exists")
+
         avatar_path = None
         if avatar_file:
             os.makedirs(AVATAR_DIR, exist_ok=True)
@@ -59,9 +64,8 @@ class SuperAdminService:
             avatar=avatar_path or "",
         )
 
-        await self.repo.add(session, new_admin)
-
         try:
+            await self.repo.add(session, new_admin)
             await session.commit()
         except IntegrityError:
             await session.rollback()

@@ -35,6 +35,8 @@ app.mount("/static", StaticFiles(directory="uploaded_files"), name="static")
 
 
 app.include_router(api_router, dependencies=[Depends(get_api_key)])
+app.include_router(api_router, prefix="/v1", dependencies=[Depends(get_api_key)])
+app.include_router(api_router, prefix="/super_admin", dependencies=[Depends(get_api_key)])
 app.include_router(ws_router)
 
 

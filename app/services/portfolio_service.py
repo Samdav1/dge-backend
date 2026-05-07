@@ -3,7 +3,7 @@ from app.schemas.portfolio import UserPortfolioRead, UserPortfolioCreate, UserPo
 import uuid
 from fastapi import UploadFile, HTTPException, status
 from sqlmodel.ext.asyncio.session import AsyncSession
-from app.dependencies.file_handler import save_avatar
+from app.dependencies.file_handler import save_portfolio_media
 from app.repositories import portfolio_repo
 from app.schemas.portfolio import PortfolioMediaCreate, PortfolioMediaRead
 
@@ -32,7 +32,7 @@ async def create_portfolio_media_service(
     await portfolio_repo.get_portfolio_by_id_and_owner(
         db=db, portfolio_id=portfolio_id, user_id=user_id
     )
-    s3_key = await save_avatar(file)
+    s3_key = await save_portfolio_media(file)
     file_size = file.size
 
     media_data = PortfolioMediaCreate(
@@ -49,7 +49,7 @@ async def create_portfolio_media_service(
 
 
 async def update_portfolio_media_service(db: AsyncSession, user_id, media_update: UploadFile) -> PortfolioMediaRead:
-    s3_key = await save_avatar(media_update)
+    s3_key = await save_portfolio_media(media_update)
     file_size = media_update.size
 
     media_data = PortfolioMediaUpdate(

@@ -6,14 +6,29 @@ from app.services.role_service import RoleService
 from app.models.role import Roles, RoleScope
 import uuid
 
-router = APIRouter(prefix="/roles", )
+router = APIRouter(prefix="", )
 
+from pydantic import BaseModel
+from typing import Optional
+from app.models.role import RoleStatus
+
+class RoleCreate(BaseModel):
+    name: str
+    description: Optional[str] = None
+    scope: RoleScope = RoleScope.global_scope
+    status: RoleStatus = RoleStatus.ACTIVE
+
+class RoleUpdate(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    scope: Optional[RoleScope] = None
+    status: Optional[RoleStatus] = None
 
 @router.post("/", response_model=Roles)
-async def create_role(name: str, team_user_id: uuid.UUID, scope: RoleScope, db: AsyncSession = Depends(get_session)):
+async def create_role(role_data: RoleCreate, db: AsyncSession = Depends(get_session)):
     repo = RoleRepository(db)
     service = RoleService(repo)
-    return await service.create_role(name, team_user_id, scope)
+    return await service.create_role(role_data.name, role_data.description, role_data.scope, role_data.status)
 
 
 @router.get("/{role_id}", response_model=Roles)
@@ -34,10 +49,10 @@ async def get_roles(db: AsyncSession = Depends(get_session)):
 
 
 @router.put("/{role_id}", response_model=Roles)
-async def update_role(role_id: uuid.UUID, name: str | None = None, scope: RoleScope | None = None, db: AsyncSession = Depends(get_session)):
+async def update_role(role_id: uuid.UUID, role_data: RoleUpdate, db: AsyncSession = Depends(get_session)):
     repo = RoleRepository(db)
     service = RoleService(repo)
-    role = await service.update_role(role_id, name, scope)
+    role = await service.update_role(role_id, role_data.name, role_data.description, role_data.scope, role_data.status)
     if not role:
         raise HTTPException(status_code=404, detail="Role not found")
     return role

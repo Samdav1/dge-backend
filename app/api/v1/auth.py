@@ -75,7 +75,7 @@ async def refresh_tokens(refresh_token: str, db: AsyncSession = Depends(get_sess
         raise HTTPException(status_code=401, detail="Invalid or expired refresh token")
 
     new_refresh = await rotate_refresh_token(db, refresh_token, db_token.user_id)
-    new_access_token = "generate_new_access_here"  # <- plug your JWT function
+    new_access_token = await get_access_token(subject=str(db_token.user_id))
 
     return {
         "access_token": new_access_token,

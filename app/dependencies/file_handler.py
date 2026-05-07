@@ -9,6 +9,26 @@ SERVICE_UPLOAD_DIR = "uploaded_files/services"
 os.makedirs(SERVICE_UPLOAD_DIR, exist_ok=True)
 KYC_UPLOAD_DIR = "uploaded_files/kyc"
 os.makedirs(KYC_UPLOAD_DIR, exist_ok=True)
+PORTFOLIO_UPLOAD_DIR = "uploaded_files/portfolio"
+os.makedirs(PORTFOLIO_UPLOAD_DIR, exist_ok=True)
+
+async def save_portfolio_media(file: UploadFile) -> str:
+    if not file.content_type.startswith("image/") and not file.content_type.startswith("video/"):
+        raise HTTPException(status_code=400, detail="Only image and video files are allowed.")
+
+    extension = os.path.splitext(file.filename)[1]
+    unique_filename = f"{uuid.uuid4()}{extension}"
+    file_path = os.path.join(PORTFOLIO_UPLOAD_DIR, unique_filename)
+
+    try:
+        async with aiofiles.open(file_path, "wb") as f:
+            while content := await file.read(1024 * 1024):  # Read in 1MB chunks
+                await f.write(content)
+    except Exception as e:
+        print(f"Error saving file: {e}")
+        raise HTTPException(status_code=500, detail="Could not save the portfolio media file.")
+
+    return f"/static/portfolio/{unique_filename}"
 
 
 async def save_avatar(file: UploadFile) -> str:

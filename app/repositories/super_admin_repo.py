@@ -14,6 +14,11 @@ class SuperAdminRepository:
         res = await session.execute(stmt)
         return res.scalar_one_or_none()
 
+    async def get_by_phone(self, session: AsyncSession, phone: str) -> Optional[SuperAdmin]:
+        stmt = select(SuperAdmin).where(SuperAdmin.phone_number == phone)
+        res = await session.execute(stmt)
+        return res.scalar_one_or_none()
+
     async def get_by_id(self, session: AsyncSession, admin_id: UUID) -> Optional[SuperAdmin]:
         stmt = select(SuperAdmin).where(SuperAdmin.id == admin_id)
         res = await session.execute(stmt)

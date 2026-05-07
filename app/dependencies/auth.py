@@ -21,28 +21,93 @@ async def get_current_user(
         payload = await decode_access_token(token.credentials)
         user_id = payload.get("sub")
         if not user_id:
+            print(f"DEBUG AUTH: No sub in payload")
             raise HTTPException(status_code=401, detail="Invalid access token payload, not valid")
 
         request.state.user_id = user_id
-        user = await get_user_by_id(user_id, db)
-        if not user:
-            raise HTTPException(status_code=401, detail="User not found")
-        validated_user = UserRead.model_validate(user)
-        return validated_user
+        
+        # Ensure user_id is a UUID if it's a string
+        from uuid import UUID
+        try:
+            uid = UUID(user_id) if isinstance(user_id, str) else user_id
+        except ValueError:
+            print(f"DEBUG AUTH: Invalid UUID format: {user_id}")
+            raise HTTPException(status_code=401, detail="Invalid user ID format")
 
-    except JWTError:
+        # Try finding in Users table
+        try:
+            user = await get_user_by_id(uid, db)
+            if user:
+                print(f"DEBUG AUTH: Found user in Users table: {uid}")
+                return UserRead.model_validate(user)
+        except Exception as e:
+            print(f"DEBUG AUTH: Error searching Users table: {e}")
+        
+        # Try finding in SuperAdmin table if not in Users
+        from app.repositories.super_admin_repo import SuperAdminRepository
+        from app.schemas.user import UserStatus
+        admin_repo = SuperAdminRepository()
+        admin = await admin_repo.get_by_id(session=db, admin_id=uid)
+        if admin:
+            print(f"DEBUG AUTH: Found user in SuperAdmin table: {uid}")
+            return UserRead(
+                id=admin.id,
+                email=admin.email,
+                username=admin.name,
+                status=UserStatus.active,
+                referral_code=None,
+                is_admin=True
+            )
+
+        print(f"DEBUG AUTH: User or Admin not found for ID: {uid}")
+        raise HTTPException(status_code=401, detail="User or Admin not found")
+
+    except JWTError as e:
+        print(f"DEBUG AUTH: JWTError: {str(e)}")
         refresh_token = request.cookies.get("refresh_token")
         if not refresh_token:
-            raise HTTPException(status_code=401, detail="Refresh Token expired or not provided, please login again")
+            raise HTTPException(status_code=401, detail="Refresh Token expired or not provided")
 
         try:
             refresh_payload = await decode_refresh_token(refresh_token)
-            user_from_refresh_token = refresh_payload.get("sub")
-            payload = await rotate_refresh_token(old_token=refresh_token, db=db, user_id=user_from_refresh_token)
+            user_id_from_refresh = refresh_payload.get("sub")
+            
+            # Rotate token
+            payload = await rotate_refresh_token(old_token=refresh_token, db=db, user_id=user_id_from_refresh)
             new_refresh_token = payload.get("token")
             user_id = payload.get("user_id")
-            request.state.user_id = user_id
+            
+            # Fallback check for admin if rotate_refresh_token or user lookup fails
+            from uuid import UUID
+            uid = UUID(user_id) if isinstance(user_id, str) else user_id
+            
+            # Try finding in Users
+            user = None
+            try:
+                user = await get_user_by_id(uid, db)
+            except HTTPException:
+                pass
+                
+            if not user:
+                # Try finding in SuperAdmin
+                from app.repositories.super_admin_repo import SuperAdminRepository
+                from app.schemas.user import UserStatus
+                admin_repo = SuperAdminRepository()
+                admin = await admin_repo.get_by_id(session=db, admin_id=uid)
+                if admin:
+                    user = UserRead(
+                        id=admin.id,
+                        email=admin.email,
+                        username=admin.name,
+                        status=UserStatus.active,
+                        referral_code=None,
+                        is_admin=True
+                    )
 
+            if not user:
+                raise HTTPException(status_code=401, detail="User or Admin not found during refresh")
+
+            # Set new refresh token cookie
             response.set_cookie(
                 key="refresh_token",
                 value=new_refresh_token,
@@ -52,15 +117,14 @@ async def get_current_user(
                 max_age=7 * 24 * 60 * 60,
             )
 
-            user = await get_user_by_id(user_id, db)
-            if not user:
-                raise HTTPException(status_code=401, detail="User not found")
-
-            new_access_token = await get_access_token(str(user.id))
+            new_access_token = await get_access_token(str(uid))
             request.state.new_access_token = new_access_token
 
-            validated_user = UserRead.model_validate(user)
-            return validated_user
+            return user if isinstance(user, UserRead) else UserRead.model_validate(user)
+
+        except Exception as e:
+            print(f"DEBUG AUTH: Refresh failed: {str(e)}")
+            raise HTTPException(status_code=401, detail="Refresh expired or failed")
 
         except Exception:
             raise HTTPException(status_code=401, detail="Refresh expired, please login again")

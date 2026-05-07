@@ -30,6 +30,9 @@ class SupportTicket(SQLModel, table=True):
     assigned_to: Optional[uuid.UUID] = Field(
         default=None, foreign_key="teamusers.id", index=True
     )
+    assigned_admin_id: Optional[uuid.UUID] = Field(
+        default=None, foreign_key="superadmin.id", index=True
+    )
 
     subject: str = Field(nullable=False, description="Short subject of the ticket")
     description: str = Field(nullable=False, description="Detailed description")
@@ -52,6 +55,7 @@ class SupportTicket(SQLModel, table=True):
 
     user: "Users" = Relationship(back_populates="support_tickets")
     assigned_team_user: Optional["TeamUsers"] = Relationship(back_populates="assigned_tickets")
+    assigned_admin: Optional["SuperAdmin"] = Relationship()
     replies: list["SupportTicketReply"] = Relationship(
         back_populates="ticket",
         sa_relationship_kwargs={"passive_deletes": True, "cascade": "all, delete-orphan"})
@@ -69,6 +73,9 @@ class SupportTicketReply(SQLModel, table=True):
     )
     author_team_user_id: Optional[uuid.UUID] = Field(
         default=None, foreign_key="teamusers.id", index=True
+    )
+    author_admin_id: Optional[uuid.UUID] = Field(
+        default=None, foreign_key="superadmin.id", index=True
     )
 
     message: str = Field(nullable=False, description="The content of the reply")
@@ -88,4 +95,5 @@ class SupportTicketReply(SQLModel, table=True):
         )
     author_user: Optional["Users"] = Relationship(back_populates="ticket_replies")
     author_team_user: Optional["TeamUsers"] = Relationship(back_populates="ticket_replies")
+    author_admin: Optional["SuperAdmin"] = Relationship()
 

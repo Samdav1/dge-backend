@@ -55,3 +55,17 @@ class Notification(SQLModel, table=True):
         sa_relationship_kwargs={"foreign_keys": "[Notification.actor_id]"}
     )
     price_negotiation: Optional['PriceNegotiation'] = Relationship(back_populates="notifications")
+
+
+class AdminNotification(SQLModel, table=True):
+    __tablename__ = "admin_notifications"
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True, nullable=False)
+    title: str = Field(nullable=False)
+    message: str = Field(nullable=False)
+    recipients: str = Field(nullable=False)
+    type: str = Field(nullable=False)
+    status: str = Field(default="DELIVERED", nullable=False)
+    created_at: datetime = Field(
+        sa_column=Column(DateTime(timezone=True), nullable=False),
+        default_factory=lambda: datetime.now(timezone.utc),
+    )

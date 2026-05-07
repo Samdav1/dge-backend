@@ -9,7 +9,26 @@ from app.db.session import get_session
 from app.schemas.profile import ProfileCreate, ProfileRead, ProfileUpdate
 from app.dependencies.auth import get_current_user
 
+from app.models.profile import Profile
+from sqlalchemy import select
+
 router = APIRouter()
+
+@router.get("/get_profile", response_model=ProfileRead, dependencies=[Depends(get_current_user)])
+async def get_current_user_profile(
+        request: Request,
+        db: AsyncSession = Depends(get_session)):
+    user_id = getattr(request.state, "user_id", None)
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Invalid access token payload")
+
+    statement = select(Profile).where(Profile.user_id == user_id)
+    result = await db.exec(statement)
+    user_profile = result.scalars().first()
+    if not user_profile:
+        raise HTTPException(status_code=404, detail="Profile not found")
+
+    return ProfileRead.model_validate(user_profile)
 
 @router.post("/create_profile", response_model=ProfileRead, dependencies=[Depends(get_current_user)])
 async def create_new_profile(

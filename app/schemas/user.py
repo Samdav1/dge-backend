@@ -41,6 +41,7 @@ class UserRead(UserBase):
     id: uuid.UUID
     status: UserStatus
     referral_code: Optional[str]
+    is_admin: bool = False
 
     class Config:
         from_attributes = True
