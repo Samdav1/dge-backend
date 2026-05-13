@@ -19,6 +19,7 @@ async def revoke(db: AsyncSession, token: str):
     db_token = await get_by_token(db, token)
     if db_token:
         db_token.revoked = True
+        db_token.revoked_at = datetime.now(timezone.utc)
         await db.commit()
         await db.refresh(db_token)
     return db_token

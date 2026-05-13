@@ -2,7 +2,7 @@
 import uuid
 from typing import List, Optional
 
-from sqlmodel import select
+from sqlmodel import select, or_
 from sqlmodel.ext.asyncio.session import AsyncSession
 from sqlalchemy.orm import selectinload, joinedload
 
@@ -37,6 +37,8 @@ class ServiceRepository:
             user_id: Optional[uuid.UUID] = None,
             status=None,
             type=None,
+            search: Optional[str] = None,
+            category_id: Optional[uuid.UUID] = None,
             offset: int = 0,  # Added for performance
             limit: int = 100,  # Added to prevent memory crashes
     ) -> List[Service]:
@@ -55,6 +57,11 @@ class ServiceRepository:
             q = q.where(Service.status == status)
         if type:
             q = q.where(Service.type == type)
+        if search:
+            search_pattern = f"%{search}%"
+            q = q.where(or_(Service.name.ilike(search_pattern), Service.description.ilike(search_pattern)))
+        if category_id:
+            q = q.join(ServiceCategoryLink).where(ServiceCategoryLink.category_id == category_id)
 
         q = q.offset(offset).limit(limit)
 

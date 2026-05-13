@@ -1,6 +1,6 @@
 from .team import TeamUsers, Teams, TeamMembership
 from .user import Users, Locations, Admin, RefreshToken
-from .driving import DriverProfile
+from .driving import DriverProfile, Ride, DriverLocation, Trip, TripStatus, RideStatus
 from .profile import Profile
 from .kyc import KYC
 from .escrow import Escrow
@@ -20,6 +20,7 @@ from .price_negotiation import PriceNegotiation
 from .work_submissions import WorkSubmission
 from .notifications import Notification, AdminNotification
 from .admin import SuperAdmin
+from .posted_job import PostedJob
 
 __all__ = [
     "AdminNotification",
@@ -57,5 +58,11 @@ __all__ = [
     "Notification",
     "RefreshToken",
     "SuperAdmin",
-    "DriverProfile"
+    "DriverProfile",
+    "Ride",
+    "DriverLocation",
+    "Trip",
+    "TripStatus",
+    "RideStatus",
+    "PostedJob",
 ]

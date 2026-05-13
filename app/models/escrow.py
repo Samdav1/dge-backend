@@ -1,5 +1,6 @@
 import uuid
 from datetime import datetime, timezone
+from typing import List, Optional
 
 from sqlmodel import SQLModel, Field, Column, ForeignKey, Relationship
 from sqlalchemy import Enum, BigInteger, DateTime
@@ -50,7 +51,7 @@ class Escrow(SQLModel, table=True):
         sa_relationship_kwargs={"foreign_keys": "[Escrow.payee_wallet_id]"}
     )
     price_negotiation: 'PriceNegotiation' = Relationship(back_populates="escrow")
-    submissions: "WorkSubmission" = Relationship(back_populates="escrow")
+    submissions: List["WorkSubmission"] = Relationship(back_populates="escrow")
 
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),

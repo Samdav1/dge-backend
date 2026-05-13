@@ -48,6 +48,7 @@ class ServiceCategory(SQLModel, table=True):
         back_populates="categories",
         link_model=ServiceCategoryLink
     )
+    posted_jobs: List["PostedJob"] = Relationship(back_populates="category")
 
 
 class Service(SQLModel, table=True):

@@ -6,7 +6,9 @@ import uuid
 
 from app.models import Users
 from app.models.price_negotiation import PriceNegotiation
+from app.models.services import Service
 from app.schemas.price_negotiation import PriceNegotiationRead, NegotiationType
+from sqlalchemy.orm import selectinload
 
 class PriceNegotiationRepository:
     def __init__(self, db: AsyncSession):
@@ -19,7 +21,13 @@ class PriceNegotiationRepository:
         return negotiation
 
     async def get_by_id(self, negotiation_id: uuid.UUID) -> Optional[PriceNegotiation]:
-        result = await self.db.execute(select(PriceNegotiation).where(PriceNegotiation.id == negotiation_id))
+        result = await self.db.execute(
+            select(PriceNegotiation).where(PriceNegotiation.id == negotiation_id).options(
+                selectinload(PriceNegotiation.services).selectinload(Service.categories),
+                selectinload(PriceNegotiation.initiator),
+                selectinload(PriceNegotiation.receiver)
+            )
+        )
         return result.scalar_one_or_none()
 
     async def get_for_user(self, user_id: uuid.UUID) -> List[PriceNegotiationRead]:
@@ -30,6 +38,10 @@ class PriceNegotiationRepository:
         query = select(PriceNegotiation).where(
             (PriceNegotiation.initiator_id == user_id) |
             (PriceNegotiation.receiver_id == user_id)
+        ).options(
+            selectinload(PriceNegotiation.services).selectinload(Service.categories),
+            selectinload(PriceNegotiation.initiator),
+            selectinload(PriceNegotiation.receiver)
         )
         result = await self.db.execute(query)
         db_negotiations = result.scalars().all()

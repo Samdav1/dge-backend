@@ -6,7 +6,12 @@ from sqlalchemy.future import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.work_submissions import WorkSubmission
+from app.models.services import Service
 from app.schemas.work_submission import WorkSubmissionCreate, WorkSubmissionRead
+
+from sqlalchemy.orm import selectinload
+from app.models.escrow import Escrow
+from app.models.wallet import Wallet
 
 class WorkSubmissionRepository:
     def __init__(self, db: AsyncSession):
@@ -21,19 +26,35 @@ class WorkSubmissionRepository:
         except Exception as e:
             await self.db.rollback()
             raise HTTPException(status_code=500, detail=f"Error creating submission: {str(e)}")
-        return WorkSubmissionRead.model_validate(new_submission)
+        
+        # Reload with options to avoid MissingGreenlet
+        return await self.get_submission(new_submission.id)
 
     async def get_submission(self, submission_id: UUID) -> WorkSubmissionRead:
-        q = await self.db.execute(select(WorkSubmission).where(WorkSubmission.id == submission_id))
-        submission = q.scalar_one_or_none()
+        q = select(WorkSubmission).where(WorkSubmission.id == submission_id).options(
+            selectinload(WorkSubmission.service).selectinload(Service.categories)
+        )
+        result = await self.db.execute(q)
+        submission = result.scalar_one_or_none()
         if not submission:
             raise HTTPException(status_code=404, detail="Submission not found")
         return WorkSubmissionRead.model_validate(submission)
 
     async def list_submissions(self, user_id: Optional[UUID] = None) -> List[WorkSubmissionRead]:
-        q = select(WorkSubmission)
+        q = select(WorkSubmission).options(
+            selectinload(WorkSubmission.service).selectinload(Service.categories)
+        )
+        
         if user_id:
-            q = q.where(WorkSubmission.user_id == user_id)
+            # Submissions where user is submitter OR user is the payer of the escrow
+            # To check payer, we join with Escrow and Wallet
+            q = q.outerjoin(Escrow, WorkSubmission.escrow_id == Escrow.id)
+            q = q.outerjoin(Wallet, Escrow.payer_wallet_id == Wallet.id)
+            q = q.where(
+                (WorkSubmission.user_id == user_id) | 
+                (Wallet.user_id == user_id)
+            )
+            
         q = q.order_by(WorkSubmission.created_at.desc())
         result = await self.db.execute(q)
         items = result.scalars().all()

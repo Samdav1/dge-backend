@@ -66,3 +66,8 @@ class PriceNegotiation(SQLModel, table=True):
     receiver: "Users" = Relationship(back_populates="negotiations_incoming", sa_relationship_kwargs={"foreign_keys": "[PriceNegotiation.receiver_id]"})
     escrow: 'Escrow' = Relationship(back_populates="price_negotiation")
     notifications: list['Notification'] = Relationship(back_populates="price_negotiation")
+
+    posted_job_id: Optional[uuid.UUID] = Field(
+        sa_column=Column(UUID(as_uuid=True), ForeignKey("posted_jobs.id"), nullable=True, index=True)
+    )
+    posted_job: Optional["PostedJob"] = Relationship(back_populates="negotiations")

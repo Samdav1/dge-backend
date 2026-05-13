@@ -61,12 +61,12 @@ class ConnectionManager:
         logger.info("ConnectionManager: stopped Redis listener")
 
     async def _redis_listener(self):
-        """Subscribe to pattern conversation:* and forward incoming messages to local sockets."""
+        """Subscribe to conversation:* and ride:* patterns and forward messages to local sockets."""
         assert self._redis is not None, "Redis client not started"
         pubsub = self._redis.pubsub(ignore_subscribe_messages=True)
-        # pattern subscribe to all conversation channels
-        await pubsub.psubscribe("conversation:*")
-        logger.info("Subscribed to Redis pattern: conversation:*")
+        # Subscribe to both chat conversations and real-time ride rooms
+        await pubsub.psubscribe("conversation:*", "ride:*")
+        logger.info("Subscribed to Redis patterns: conversation:*, ride:*")
         try:
             async for message in pubsub.listen():
                 if message is None:
@@ -85,14 +85,24 @@ class ConnectionManager:
                     else:
                         payload = data_raw
 
-                    # payload must include conversation_id and message body
-                    conv = payload.get("conversation_id") or self._channel_to_conversation(message.get("channel"))
-                    if not conv:
-                        logger.warning("Redis message missing conversation_id: %s", payload)
+                    # Determine the room id from the channel name or payload
+                    channel_raw = message.get("channel", b"")
+                    channel_str = channel_raw.decode() if isinstance(channel_raw, bytes) else str(channel_raw)
+
+                    if channel_str.startswith("ride:"):
+                        # ride:{trip_id}  →  local room key is ride_{trip_id}
+                        trip_id_part = channel_str.split(":", 1)[1]
+                        room_id = f"ride_{trip_id_part}"
+                    else:
+                        # conversation:{conversation_id}
+                        room_id = payload.get("conversation_id") or self._channel_to_conversation(channel_raw)
+
+                    if not room_id:
+                        logger.warning("Redis message has no room id: %s", payload)
                         continue
 
-                    # Broadcast to local sockets that have joined the conversation
-                    await self._broadcast_local(conv, payload)
+                    # Broadcast to local sockets in that room
+                    await self._broadcast_local(room_id, payload)
                 except Exception as exc:
                     logger.exception("Error handling pubsub message: %s", exc)
         except asyncio.CancelledError:

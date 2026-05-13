@@ -1,4 +1,4 @@
-from datetime import timezone
+from datetime import timezone, datetime, timedelta
 from app.dependencies.auth import get_current_user
 from fastapi import APIRouter, HTTPException, Response
 from fastapi.security import OAuth2PasswordRequestForm
@@ -35,7 +35,7 @@ async def create(response: Response, user_create: UserCreate, referrals: str | N
 
     response.set_cookie(
         key="refresh_token",
-        value=refresh_token,
+        value=refresh_token.token,
         httponly=True,
         secure=True,
         samesite= "lax",
@@ -58,7 +58,7 @@ async def login_for_access_token(response: Response, form_data: OAuth2PasswordRe
 
     response.set_cookie(
         key="refresh_token",
-        value=refresh_token,
+        value=refresh_token.token,
         httponly=True,
         secure=True,
         samesite="lax",
@@ -71,8 +71,14 @@ async def login_for_access_token(response: Response, form_data: OAuth2PasswordRe
 @router.post("/refresh")
 async def refresh_tokens(refresh_token: str, db: AsyncSession = Depends(get_session)):
     db_token = await get_by_token(db, refresh_token)
-    if not db_token or db_token.revoked or db_token.expires_at < datetime.now(timezone.utc):
+    if not db_token or db_token.expires_at < datetime.now(timezone.utc):
         raise HTTPException(status_code=401, detail="Invalid or expired refresh token")
+
+    # Allow a 30-second grace period for recently revoked tokens to handle race conditions
+    if db_token.revoked:
+        grace_period = timedelta(seconds=30)
+        if not db_token.revoked_at or (datetime.now(timezone.utc) - db_token.revoked_at) > grace_period:
+            raise HTTPException(status_code=401, detail="Refresh token has been revoked")
 
     new_refresh = await rotate_refresh_token(db, refresh_token, db_token.user_id)
     new_access_token = await get_access_token(subject=str(db_token.user_id))
@@ -102,7 +108,7 @@ async def google_callback_login(response: Response, token: GoogleCallBack, db: A
 
     response.set_cookie(
         key="refresh_token",
-        value=refresh_token,
+        value=refresh_token.token,
         httponly=True,
         secure=True,
         samesite="lax",

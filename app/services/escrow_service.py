@@ -20,7 +20,16 @@ from app.schemas.transactions import TransactionCreate
 from app.services.wallet_service import update_user_wallet_service
 from app.repositories.transactions_repo import TransactionRepository
 from app.workers.tasks.email_service_task import send_email_task
-
+from app.schemas.escrow import EscrowActionPayload
+from app.schemas.conversation import ConversationCreate, ConversationType
+from app.repositories.conversation_repo import insert_conversation_into_db
+from app.schemas.messages import MessageCreate, MessageContentType
+from app.repositories.messages_repo import MessageRepository
+from app.services.messages_service import MessageService
+from app.schemas.portfolio import UserPortfolioCreate
+from app.repositories.portfolio_repo import get_portfolio_repo, create_portfolio_repo
+from app.schemas.reviews import ReviewCreate
+from app.services.reviews_service import ReviewService
 class EscrowService:
     def __init__(self, db: AsyncSession):
         self.db = db
@@ -118,7 +127,7 @@ class EscrowService:
 
         return new_escrow
 
-    async def release_escrow(self, user, escrow_id: uuid.UUID) -> Escrow:
+    async def release_escrow(self, user, escrow_id: uuid.UUID, payload: Optional[EscrowActionPayload] = None) -> Escrow:
         """
         Release escrow funds to the payee within a single atomic transaction.
         """
@@ -176,6 +185,48 @@ class EscrowService:
                 detail=f"Failed to release escrow due to an error: {str(e)}"
             )
 
+        # Handle review and direct message from payload
+        if payload:
+            # Send Direct Message
+            if payload.direct_message:
+                try:
+                    conv_create = ConversationCreate(type=ConversationType.private, recipient_id=payee_user.id)
+                    conversation = await insert_conversation_into_db(self.db, conv_create, user.id)
+                    
+                    msg_create = MessageCreate(
+                        content=payload.direct_message,
+                        content_type=MessageContentType.text,
+                        conversation_id=conversation.id,
+                        sender_id=user.id
+                    )
+                    msg_repo = MessageRepository(self.db)
+                    msg_svc = MessageService(msg_repo)
+                    await msg_svc.create_message(msg_create)
+                except Exception as e:
+                    print(f"Failed to create direct message: {e}")
+
+            # Create Review
+            if payload.rating is not None and payload.review_comment:
+                try:
+                    try:
+                        portfolio = await get_portfolio_repo(self.db, payee_user.id)
+                    except HTTPException as he:
+                        if he.status_code == 404:
+                            p_info = UserPortfolioCreate(title=f"{payee_user.username}'s Portfolio", description="Auto-generated portfolio", category="General")
+                            portfolio = await create_portfolio_repo(p_info, self.db, payee_user.id)
+                        else:
+                            raise he
+
+                    rev_create = ReviewCreate(
+                        rating=payload.rating,
+                        comment=payload.review_comment,
+                        portfolio_id=portfolio.id,
+                        user_id=user.id
+                    )
+                    await ReviewService.create_review(self.db, rev_create)
+                except Exception as e:
+                    print(f"Failed to create review: {e}")
+
         await self.db.refresh(escrow)
         return await self.repo.get_by_id(escrow_id)
 
@@ -224,7 +275,7 @@ class EscrowService:
         self.notifier.send_escrow_refund_mail(payer, escrow)
         return escrow
 
-    async def dispute_escrow(self, user, escrow_id: uuid.UUID) -> Escrow:
+    async def dispute_escrow(self, user, escrow_id: uuid.UUID, payload: Optional[EscrowActionPayload] = None) -> Escrow:
         """
         Mark an escrow as disputed (no funds move).
         Only the payer, payee, or staff/admin should be able to call this.
@@ -246,5 +297,25 @@ class EscrowService:
         self.db.add(escrow)
         await self.db.commit()
         await self.db.refresh(escrow)
+
+        if payload and payload.direct_message:
+            try:
+                # Determine recipient (the other party)
+                recipient_id = payee.id if user.id == payer.id else payer.id
+                conv_create = ConversationCreate(type=ConversationType.private, recipient_id=recipient_id)
+                conversation = await insert_conversation_into_db(self.db, conv_create, user.id)
+                
+                msg_create = MessageCreate(
+                    content=payload.direct_message,
+                    content_type=MessageContentType.text,
+                    conversation_id=conversation.id,
+                    sender_id=user.id
+                )
+                msg_repo = MessageRepository(self.db)
+                msg_svc = MessageService(msg_repo)
+                await msg_svc.create_message(msg_create)
+            except Exception as e:
+                print(f"Failed to create direct message for dispute: {e}")
+
         self.notifier.send_escrow_dispute_mail(payer=payer, payee=payee, escrow=escrow)
         return escrow

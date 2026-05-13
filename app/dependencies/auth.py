@@ -9,6 +9,9 @@ from app.repositories.user_repo import get_user_by_id
 from app.services.auth_service import rotate_refresh_token
 from app.schemas.user import UserRead
 
+from datetime import datetime, timezone, timedelta
+from app.repositories.refresh_token_repo import get_by_token
+
 security = HTTPBearer()
 
 async def get_current_user(
@@ -63,51 +66,56 @@ async def get_current_user(
         raise HTTPException(status_code=401, detail="User or Admin not found")
 
     except JWTError as e:
-        print(f"DEBUG AUTH: JWTError: {str(e)}")
+        print(f"DEBUG AUTH: Access token expired/invalid: {str(e)}")
         refresh_token = request.cookies.get("refresh_token")
         if not refresh_token:
-            raise HTTPException(status_code=401, detail="Refresh Token expired or not provided")
+            raise HTTPException(status_code=401, detail="Session expired, please login again")
 
         try:
+            # Check revocation status with grace period before rotating
+            db_token = await get_by_token(db, refresh_token)
+            if not db_token or db_token.expires_at < datetime.now(timezone.utc):
+                raise HTTPException(status_code=401, detail="Invalid or expired refresh token")
+
+            if db_token.revoked:
+                # 30-second grace period for recently rotated tokens
+                grace_period = timedelta(seconds=30)
+                if not db_token.revoked_at or (datetime.now(timezone.utc) - db_token.revoked_at) > grace_period:
+                    raise HTTPException(status_code=401, detail="Refresh token has been revoked")
+
             refresh_payload = await decode_refresh_token(refresh_token)
             user_id_from_refresh = refresh_payload.get("sub")
             
             # Rotate token
-            payload = await rotate_refresh_token(old_token=refresh_token, db=db, user_id=user_id_from_refresh)
-            new_refresh_token = payload.get("token")
-            user_id = payload.get("user_id")
+            rotated_token = await rotate_refresh_token(old_token=refresh_token, db=db, user_id=user_id_from_refresh)
+            new_refresh_token = rotated_token.token
+            user_id = rotated_token.user_id
             
-            # Fallback check for admin if rotate_refresh_token or user lookup fails
             from uuid import UUID
             uid = UUID(user_id) if isinstance(user_id, str) else user_id
             
-            # Try finding in Users
+            # Find User or Admin
             user = None
             try:
                 user = await get_user_by_id(uid, db)
-            except HTTPException:
+            except Exception:
                 pass
                 
             if not user:
-                # Try finding in SuperAdmin
                 from app.repositories.super_admin_repo import SuperAdminRepository
                 from app.schemas.user import UserStatus
                 admin_repo = SuperAdminRepository()
                 admin = await admin_repo.get_by_id(session=db, admin_id=uid)
                 if admin:
                     user = UserRead(
-                        id=admin.id,
-                        email=admin.email,
-                        username=admin.name,
-                        status=UserStatus.active,
-                        referral_code=None,
-                        is_admin=True
+                        id=admin.id, email=admin.email, username=admin.name,
+                        status=UserStatus.active, referral_code=None, is_admin=True
                     )
 
             if not user:
-                raise HTTPException(status_code=401, detail="User or Admin not found during refresh")
+                raise HTTPException(status_code=401, detail="User not found after refresh")
 
-            # Set new refresh token cookie
+            # Update cookies and state
             response.set_cookie(
                 key="refresh_token",
                 value=new_refresh_token,
@@ -122,9 +130,6 @@ async def get_current_user(
 
             return user if isinstance(user, UserRead) else UserRead.model_validate(user)
 
-        except Exception as e:
-            print(f"DEBUG AUTH: Refresh failed: {str(e)}")
-            raise HTTPException(status_code=401, detail="Refresh expired or failed")
-
-        except Exception:
-            raise HTTPException(status_code=401, detail="Refresh expired, please login again")
+        except Exception as exc:
+            print(f"DEBUG AUTH: Auto-refresh failed: {str(exc)}")
+            raise HTTPException(status_code=401, detail="Session expired, please login again")

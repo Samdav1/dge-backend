@@ -15,6 +15,9 @@ class PriceNegotiationUpdate(BaseModel):
     message: Optional[str] = None
     status: Optional[NegotiationStatus] = None
 
+from app.schemas.services import ServiceRead
+from app.schemas.user import UserRead
+
 class PriceNegotiationRead(BaseModel):
     id: uuid.UUID
     service_id: uuid.UUID
@@ -26,6 +29,10 @@ class PriceNegotiationRead(BaseModel):
     status: NegotiationStatus
     created_at: datetime
     updated_at: datetime
+    posted_job_id: Optional[uuid.UUID] = None
+    services: Optional[ServiceRead] = None
+    initiator: Optional[UserRead] = None
+    receiver: Optional[UserRead] = None
 
     class Config:
         from_attributes = True

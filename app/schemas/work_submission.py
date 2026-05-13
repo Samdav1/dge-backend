@@ -44,6 +44,8 @@ class WorkSubmissionCreate(BaseModel):
         )
 
 
+from app.schemas.services import ServiceRead
+
 class WorkSubmissionRead(BaseModel):
     id: UUID
     user_id: UUID
@@ -54,6 +56,7 @@ class WorkSubmissionRead(BaseModel):
     image_urls: Optional[List[str]]
     file_urls: Optional[List[str]]
     created_at: datetime
+    service: Optional[ServiceRead] = None
 
     class Config:
         from_attributes = True

@@ -11,19 +11,37 @@ import uuid
 from app.models.escrow import Escrow, EscrowStatus
 from app.models.wallet import Wallet
 from app.models.price_negotiation import PriceNegotiation
+from app.models.work_submissions import WorkSubmission
+from app.models.services import Service
 
+
+from sqlalchemy.orm import selectinload
 
 class EscrowRepository:
     def __init__(self, session: AsyncSession):
         self.session = session
 
     async def get_by_id(self, escrow_id: uuid.UUID) -> Optional[Escrow]:
-        q = sa_select(Escrow).where(Escrow.id == escrow_id)
+        q = sa_select(Escrow).where(Escrow.id == escrow_id).options(
+            selectinload(Escrow.price_negotiation).selectinload(PriceNegotiation.services).selectinload(Service.categories),
+            selectinload(Escrow.price_negotiation).selectinload(PriceNegotiation.initiator),
+            selectinload(Escrow.price_negotiation).selectinload(PriceNegotiation.receiver),
+            selectinload(Escrow.submissions).selectinload(WorkSubmission.service).selectinload(Service.categories),
+            selectinload(Escrow.payer_wallet),
+            selectinload(Escrow.payee_wallet)
+        )
         res = await self.session.exec(q)
         return res.scalar_one_or_none()
 
     async def get_by_negotiation(self, negotiation_id: uuid.UUID) -> Optional[Escrow]:
-        q = sa_select(Escrow).where(Escrow.payment_negotiation_id == negotiation_id)
+        q = sa_select(Escrow).where(Escrow.payment_negotiation_id == negotiation_id).options(
+            selectinload(Escrow.price_negotiation).selectinload(PriceNegotiation.services).selectinload(Service.categories),
+            selectinload(Escrow.price_negotiation).selectinload(PriceNegotiation.initiator),
+            selectinload(Escrow.price_negotiation).selectinload(PriceNegotiation.receiver),
+            selectinload(Escrow.submissions).selectinload(WorkSubmission.service).selectinload(Service.categories),
+            selectinload(Escrow.payer_wallet),
+            selectinload(Escrow.payee_wallet)
+        )
         res = await self.session.exec(q)
         return res.scalar_one_or_none()
 
@@ -36,6 +54,13 @@ class EscrowRepository:
             (Escrow.payee_wallet_id.in_(
                 sa_select(Wallet.id).where(Wallet.user_id == user_id)
             ))
+        ).options(
+            selectinload(Escrow.price_negotiation).selectinload(PriceNegotiation.services).selectinload(Service.categories),
+            selectinload(Escrow.price_negotiation).selectinload(PriceNegotiation.initiator),
+            selectinload(Escrow.price_negotiation).selectinload(PriceNegotiation.receiver),
+            selectinload(Escrow.submissions).selectinload(WorkSubmission.service).selectinload(Service.categories),
+            selectinload(Escrow.payer_wallet),
+            selectinload(Escrow.payee_wallet)
         )
         res = await self.session.exec(q)
         return res.scalars().all()

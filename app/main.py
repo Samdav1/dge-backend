@@ -8,6 +8,7 @@ import app.models
 from app.api.v1 import router as api_router
 from app.core.api_key import get_api_key
 from app.dependencies.socket_connection import ConnectionManager
+from app.middlewares.auth_middleware import AuthMiddleware
 
 
 manager = ConnectionManager(redis_url="redis://localhost:6379/0")
@@ -30,6 +31,8 @@ app = FastAPI(
     title="DGE Techs",
     lifespan=lifespan,
 )
+
+app.add_middleware(AuthMiddleware)
 
 app.mount("/static", StaticFiles(directory="uploaded_files"), name="static")
 

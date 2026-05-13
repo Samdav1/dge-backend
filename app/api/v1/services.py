@@ -10,7 +10,7 @@ from app.schemas.services import ServiceCreate, ServiceRead, ServiceUpdate, Serv
 from app.schemas.user import UserRead
 from app.dependencies.auth import get_current_user
 
-router = APIRouter()
+router = APIRouter(prefix="/services", tags=["services"])
 
 
 def get_service_service(db: AsyncSession = Depends(get_session)) -> ServiceService:
@@ -70,6 +70,8 @@ async def list_services(
         status: Optional[str] = None,
         type: Optional[str] = None,
         only_mine: Optional[bool] = False,
+        search: Optional[str] = None,
+        category_id: Optional[uuid.UUID] = None,
         db: AsyncSession = Depends(get_session),
         current_user: UserRead = Depends(get_current_user),
         service: ServiceService = Depends(get_service_service),
@@ -78,7 +80,7 @@ async def list_services(
     status_enum = ServiceStatus(status) if status else None
     type_enum = ServiceType(type) if type else None
     user_id = current_user.id if only_mine else None
-    results = await service.list_services(user_id=user_id, status=status_enum, type=type_enum)
+    results = await service.list_services(user_id=user_id, status=status_enum, type=type_enum, search=search, category_id=category_id)
     return results
 
 

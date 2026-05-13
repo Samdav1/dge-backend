@@ -1,10 +1,10 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlmodel.ext.asyncio.session import AsyncSession
-from typing import List
+from typing import List, Optional
 import uuid
 from app.db.session import get_session
 from app.dependencies.auth import get_current_user
-from app.schemas.escrow import EscrowCreate, EscrowRead, EscrowActionResponse
+from app.schemas.escrow import EscrowCreate, EscrowRead, EscrowActionResponse, EscrowActionPayload
 from app.schemas.user import UserRead
 from app.services.escrow_service import EscrowService
 
@@ -50,12 +50,13 @@ async def get_escrow(
 @router.post("/{escrow_id}/release", response_model=EscrowActionResponse)
 async def release_escrow(
     escrow_id: uuid.UUID,
+    payload: Optional[EscrowActionPayload] = None,
     current_user = Depends(get_current_user),
     db: AsyncSession = Depends(get_session),
     service: EscrowService = Depends(get_escrow_service),
 ):
     try:
-        escrow = await service.release_escrow(current_user, escrow_id)
+        escrow = await service.release_escrow(current_user, escrow_id, payload)
         return EscrowActionResponse(id=escrow.id, status=escrow.status, message="Escrow released")
     except PermissionError as e:
         raise HTTPException(status_code=403, detail=str(e))
@@ -85,11 +86,12 @@ async def refund_escrow(
 @router.post("/{escrow_id}/dispute", response_model=EscrowActionResponse)
 async def dispute_escrow(
     escrow_id: uuid.UUID,
+    payload: Optional[EscrowActionPayload] = None,
     current_user = Depends(get_current_user),
     service: EscrowService = Depends(get_escrow_service),
 ):
     try:
-        escrow = await service.dispute_escrow(current_user, escrow_id)
+        escrow = await service.dispute_escrow(current_user, escrow_id, payload)
         return EscrowActionResponse(id=escrow.id, status=escrow.status, message="Escrow disputed")
     except PermissionError as e:
         raise HTTPException(status_code=403, detail=str(e))

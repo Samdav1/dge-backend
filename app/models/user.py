@@ -92,6 +92,7 @@ class Users(SQLModel, table=True):
     )
     refresh_tokens: list["RefreshToken"] = Relationship(back_populates="user")
     submissions: list["WorkSubmission"] = Relationship(back_populates="user")
+    posted_jobs: list["PostedJob"] = Relationship(back_populates="user")
 
 
 
@@ -128,5 +129,9 @@ class RefreshToken(SQLModel, table=True):
         default_factory=lambda: datetime.now(timezone.utc),
     )
     revoked: bool = Field(default=False, nullable=False)
+    revoked_at: Optional[datetime] = Field(
+        sa_column=Column(DateTime(timezone=True), nullable=True),
+        default=None
+    )
 
     user: "Users" = Relationship(back_populates="refresh_tokens")

@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlmodel.ext.asyncio.session import AsyncSession
-from typing import List
+from pydantic import BaseModel
+from typing import List, Optional
 import uuid
 from app.db.session import get_session
 
@@ -16,6 +17,13 @@ from app.schemas.user import UserRead
 
 router = APIRouter()
 
+
+class JobBidCreate(BaseModel):
+    service_id: uuid.UUID
+    proposed_price_cents: int
+    message: Optional[str] = None
+
+
 @router.post("/", response_model=PriceNegotiationRead)
 async def create_negotiation(
     payload: PriceNegotiationCreate,
@@ -24,6 +32,23 @@ async def create_negotiation(
 ):
     service = PriceNegotiationService(PriceNegotiationRepository(db))
     return await service.create(payload, user.id)
+
+@router.post("/posted_job/{job_id}/bid", response_model=PriceNegotiationRead)
+async def bid_on_posted_job(
+    job_id: uuid.UUID,
+    payload: JobBidCreate,
+    user: UserRead = Depends(get_current_user),
+    db: AsyncSession = Depends(get_session),
+):
+    """Submit a bid on a posted job. Bidder must own the specified service."""
+    service = PriceNegotiationService(PriceNegotiationRepository(db))
+    return await service.bid_on_posted_job(
+        job_id=job_id,
+        service_id=payload.service_id,
+        proposed_price_cents=payload.proposed_price_cents,
+        message=payload.message,
+        bidder_id=user.id,
+    )
 
 @router.get("/", response_model=List[PriceNegotiationRead])
 async def get_my_negotiations(
