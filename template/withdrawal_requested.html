@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h2>Withdrawal Request Received ⏳</h2>
+
+<p>Hi {{ name }},</p>
+
+<p>We've received your request to withdraw funds from your DGE World wallet. Your request is currently pending administrative review and will be processed shortly.</p>
+
+<table class="details-table">
+    <tr>
+        <th>Amount Requested</th>
+        <td style="color: #f59e0b;">{{ amount }}</td>
+    </tr>
+    <tr>
+        <th>Destination Bank</th>
+        <td>{{ bank_name }}</td>
+    </tr>
+    <tr>
+        <th>Account Number</th>
+        <td>{{ account_number }}</td>
+    </tr>
+    <tr>
+        <th>Status</th>
+        <td>Pending Review</td>
+    </tr>
+</table>
+
+<p>You will receive another email as soon as your withdrawal has been processed.</p>
+
+<div class="cta-container">
+    <a href="{{ cta_link }}" class="cta-button">View Transaction History</a>
+</div>
+{% endblock %}

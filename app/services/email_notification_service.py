@@ -5,259 +5,248 @@ from app.models.escrow import Escrow
 from app.schemas.user import UserRead
 from app.workers.tasks.email_service_task import send_email_task
 
+from app.core.background import dispatch_task
+from app.dependencies.email_service import EmailService
+
+import os
 
 class NotificationService:
-    def __init__(self, template_folder: str = '../template'):
+    def __init__(self, template_folder: str = None):
+        if template_folder is None:
+            # Resolve absolute path to dge-tech/template
+            base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+            template_folder = os.path.join(base_dir, 'template')
         self.env = Environment(loader=FileSystemLoader(template_folder))
 
     def _render_and_dispatch(self, template_name: str, recipient_email: list[str], subject: str, context: dict):
-        """Helper to render a template and dispatch the Celery task."""
+        """Helper to render a template and dispatch the task."""
         try:
+            # Inject common context
+            context['subject'] = subject
+            
             template = self.env.get_template(template_name)
             html_output = template.render(context)
-
-            send_email_task.delay(
-                recipient=recipient_email,
-                subject=subject,
-                html_body=html_output
+            
+            service = EmailService()
+            dispatch_task(
+                send_email_task,
+                service.send_email,
+                recipient_email, # maps to recipient (celery) or recipients (sync)
+                subject,
+                html_output
             )
         except Exception as e:
             # Add logging here!
             print(f"Failed to send email: {e}")
 
-    def send_escrow_creation_debit(self, payer: Users, negotiation):
-        """Sends the "you paid" email to the payer."""
-
-        subject = "Account Debited by DGE World Escrow Service"
-
-        email_context = {
-            'title': "Some Funds Have Left Your Account",
-            'name': payer.username,
-            'body': f"Just a quick confirmation! Your escrow payment for ${negotiation.proposed_price_cents / 100:.2f} has been successfully sent from your wallet. The funds are on their way!",
-            'cta_text': "View Transaction Details",
-            'cta_link': "#"
-        }
-
-        self._render_and_dispatch(
-            template_name='email_template.html',
-            recipient_email=[payer.email],
-            subject=subject,
-            context=email_context
-        )
-
-    def send_escrow_release_credit(self, payee: Users, escrow):
-        """Sends the "you got paid" email to the payee."""
-
-        subject = "Escrow Funds Released"
-
-        email_context = {
-            'title': "Funds Released to Your Wallet!",
-            'name': payee.username,
-            'body': f"Great news! The escrow payment for ${escrow.amount_cents / 100:.2f} has been successfully released and deposited into your wallet.",
-            'cta_text': "View Wallet",
-            'cta_link': "#"
-        }
-
-        self._render_and_dispatch(
-            template_name='email_template.html',
-            recipient_email=[payee.email, payee.email],
-            subject=subject,
-            context=email_context
-        )
-
-    def send_escrow_creation_mail(self, payer: Users, payee: Users, escrow: Escrow):
-        """Sends the confirmation for escrow creation for both parties"""
-
-        subject = "Escrow Creation"
-
-        email_context = {
-            'title': "Escrow Creation",
-            'name': payee.username,
-            'body': f"This is a confirmation email for your current active escrow service. Escrow ID {escrow.id} ",
-            'cta_text': "View Transaction Details",
-            'cta_link': "#"
-        }
-
-        self._render_and_dispatch(
-            template_name='email_template.html',
-            recipient_email=[payee.email, payer.email],
-            subject=subject,
-            context=email_context
-        )
-
-    def send_escrow_refund_mail(self, payer: Users, escrow: Escrow):
-        """
-        Sends a confirmation email to the PAYER when an escrow is refunded.
-        """
-
-        subject = f"Your Escrow Refund is Complete! (${escrow.amount_cents / 100:.2f})"
-        amount_formatted = f"${escrow.amount_cents / 100:.2f}"
-
-        email_context = {
-            'title': "Funds Returned!",
-            'name': payer.username,
-            'body': (
-                f"<p>We've successfully processed your refund of <strong>{amount_formatted}</strong> for Escrow ID {escrow.id}. The funds are now back in your wallet.</p>"
-                "<p>We believe in a fair and transparent community, and we're here to ensure every interaction feels secure. While this one didn't work out, we're ready for your next connection!</p>"
-            ),
-            'cta_text': "View Your Wallet",
-            'cta_link': "#"
-        }
-
-        self._render_and_dispatch(
-            template_name='email_template.html',
-            recipient_email=[payer.email],
-            subject=subject,
-            context=email_context
-        )
-
-    def send_escrow_dispute_mail(self, payer: Users, payee: Users, escrow: Escrow):
-        """
-        Notifies BOTH parties that an escrow has been moved into dispute.
-        """
-
-        subject = f"Action Required: A Dispute Has Been Opened (Escrow ID {escrow.id})"
-
-        payer_context = {
-            'title': "We're Here to Help",
-            'name': payer.username,
-            'body': (
-                f"<p>We've received a dispute request for Escrow ID {escrow.id}. Don't worry, your funds are held securely while our team reviews the situation.</p>"
-                "<p>Our goal is always a fair outcome. We see this not as a conflict, but as a chance to find clarity together. Please provide any details that can help us understand your side of the story.</p>"
-            ),
-            'cta_text': "Go to Dispute Center",
-            'cta_link': "#"
-        }
-
-        self._render_and_dispatch(
-            template_name='email_template.html',
-            recipient_email=[payer.email],
-            subject=subject,
-            context=payer_context
-        )
-
-        payee_context = {
-            'title': "We're Here to Help",
-            'name': payee.username,
-            'body': (
-                f"<p>A dispute has been opened by the other party for Escrow ID {escrow.id}. Your pending payment is held securely while our team reviews the situation.</p>"
-                "<p>Our goal is always a fair outcome. We see this not as a conflict, but as a chance to find clarity together. Please provide any details that can help us understand your side of the story.</p>"
-            ),
-            'cta_text': "Go to Dispute Center",
-            'cta_link': "#"
-        }
-
-        self._render_and_dispatch(
-            template_name='email_template.html',
-            recipient_email=[payee.email],
-            subject=subject,
-            context=payee_context
-        )
+    # ─── Onboarding ─────────────────────────────────────────────────────────
 
     def send_signup_welcome_mail(self, new_user: UserRead):
-        """
-        Sends a warm welcome email to a new user upon signup.
-        (I renamed this from 'send_signup_creation_mail' for clarity
-         and fixed the arguments, as it doesn't need escrow info)
-        """
-
         subject = "Welcome to the DGE World! You're One of Us Now."
-
-        email_context = {
-            'title': f"Welcome, {new_user.username}!",
+        context = {
             'name': new_user.username,
-            'body': (
-                "<p>You've officially joined a community where every connection matters. We're not just building a platform; we're building a world centered on trust, unity, and unique experiences.</p>"
-                "<p>This is where your ideas meet opportunity, and where every interaction is protected. We're so excited to see what you'll achieve.</p>"
-                "<p>Ready to make your first move?</p>"
-            ),
             'cta_text': "Explore Your Dashboard",
-            'cta_link': "#"
+            'cta_link': "https://your-frontend.com/dashboard" # Configure dynamically in the future
         }
-
-        self._render_and_dispatch(
-            template_name='email_template.html',
-            recipient_email=[str(new_user.email)],
-            subject=subject,
-            context=email_context
-        )
-
-    def send_price_negotiation_offer(self, receiver: Users, initiator: Users, negotiation: PriceNegotiation):
-        """
-        Notifies a user that they have received a new price negotiation offer for their service.
-        """
-
-        subject = f"An Opportunity Awaits!🌟 You've Received a New Offer from {initiator.username}"
-
-        amount_formatted = f"${negotiation.proposed_price_cents / 100:.2f}"
-
-        email_context = {
-            'title': f"A New Connection is Forming, {receiver.username}!",
-            'name': receiver.username,
-            'body': (
-                f"<p>Your unique talent has caught someone's eye! 🌟</p>"
-                f"<p><strong>{initiator.username}</strong> is excited by what you offer and has reached out with a proposal of <strong>{amount_formatted}</strong>.</p>"
-                "<p>This is more than a transaction; it's the start of a potential collaboration. Every great project begins with a conversation, and yours is waiting to begin.</p>"
-            ),
-            'cta_text': "Review Your Offer & Respond",
-            'cta_link': f"#"
-        }
-
-        self._render_and_dispatch(
-            template_name='email_template.html',
-            recipient_email=[receiver.email],
-            subject=subject,
-            context=email_context
-        )
+        self._render_and_dispatch('welcome.html', [str(new_user.email)], subject, context)
 
     def send_verification_email(self, new_user: UserRead, token: str):
-        """
-        Sends the email verification link to a new user.
-        """
-        verification_link = f"https://your-api.com/v1/users/verify-email?token={token}"
-
         subject = "Welcome to DGE World! Please Verify Your Email"
-
-        email_context = {
-            'title': f"One Last Step, {new_user.username}!",
+        verification_link = f"https://your-api.com/v1/users/verify-email?token={token}"
+        context = {
             'name': new_user.username,
-            'body': (
-                "<p>We are so excited to have you join our community. To complete your registration, please verify your email address by clicking the button below.</p>"
-                "<p>This link is valid for 1 hour.</p>"
-            ),
-            'cta_text': "Verify My Email",
             'cta_link': verification_link
         }
-
-        self._render_and_dispatch(
-            template_name='email_template.html',
-            recipient_email=[str(new_user.email)],
-            subject=subject,
-            context=email_context
-        )
+        self._render_and_dispatch('verify_email.html', [str(new_user.email)], subject, context)
 
     def send_verification_success_email(self, user: UserRead):
-        """
-        Sends a friendly email to a user after they have successfully verified their email.
-        """
-
         subject = "You're Verified! Welcome to DGE World 🎉"
-
-        email_context = {
-            'title': f"All Set, {user.username}!",
+        context = {
             'name': user.username,
-            'body': (
-                "<p>Great news! Your email is officially verified, and your account is now fully active and secure. ✅</p>"
-                "<p>You're all set to explore DGE World, a community built on trust and unique connections. We're so excited to have you with us.</p>"
-                "<p>Ready to dive in?</p>"
-            ),
             'cta_text': "Go to Your Dashboard",
             'cta_link': "https://your-frontend.com/dashboard"
         }
+        self._render_and_dispatch('welcome.html', [str(user.email)], subject, context)
 
-        self._render_and_dispatch(
-            template_name='email_template.html',
-            recipient_email=[str(user.email)],
-            subject=subject,
-            context=email_context
-        )
+    # ─── Payments & Wallets ───────────────────────────────────────────────────
+
+    def send_deposit_success_mail(self, user: Users, amount_cents: int, reference: str, date_str: str):
+        subject = "Deposit Successful - DGE World"
+        context = {
+            'name': user.username,
+            'amount': f"₦{amount_cents / 100:,.2f}",
+            'reference': reference,
+            'date': date_str,
+            'cta_link': "https://your-frontend.com/dashboard/wallet"
+        }
+        self._render_and_dispatch('deposit_success.html', [user.email], subject, context)
+
+    def send_withdrawal_status_mail(self, user: Users, status: str, amount_cents: int, bank_name: str, account_number: str, reference: str = None, rejection_reason: str = None):
+        amount_str = f"₦{amount_cents / 100:,.2f}"
+        
+        if status == "pending":
+            subject = "Withdrawal Request Received ⏳"
+            context = {
+                'name': user.username,
+                'amount': amount_str,
+                'bank_name': bank_name,
+                'account_number': account_number,
+                'cta_link': "https://your-frontend.com/dashboard/wallet"
+            }
+            self._render_and_dispatch('withdrawal_requested.html', [user.email], subject, context)
+        else:
+            subject = f"Withdrawal {status.capitalize()} - DGE World"
+            context = {
+                'name': user.username,
+                'status': status,
+                'amount': amount_str,
+                'bank_name': bank_name,
+                'account_number': account_number,
+                'reference': reference or 'N/A',
+                'rejection_reason': rejection_reason,
+                'cta_link': "https://your-frontend.com/dashboard/wallet"
+            }
+            self._render_and_dispatch('withdrawal_processed.html', [user.email], subject, context)
+
+    # ─── Services & Submissions ─────────────────────────────────────────────
+
+    def send_service_purchase_mail(self, buyer: Users, seller: Users, service_title: str, amount_cents: int, order_id: str):
+        amount_str = f"₦{amount_cents / 100:,.2f}"
+
+        # To Buyer (Receipt)
+        self._render_and_dispatch('service_purchase.html', [buyer.email], "Your Purchase is Confirmed! 🛒", {
+            'is_buyer': True,
+            'name': buyer.username,
+            'other_party': seller.username,
+            'service_title': service_title,
+            'amount': amount_str,
+            'order_id': order_id,
+            'cta_link': "https://your-frontend.com/dashboard/orders"
+        })
+
+        # To Seller (New Order)
+        self._render_and_dispatch('service_purchase.html', [seller.email], "You Have a New Order! 🎉", {
+            'is_buyer': False,
+            'name': seller.username,
+            'other_party': buyer.username,
+            'service_title': service_title,
+            'amount': amount_str,
+            'order_id': order_id,
+            'cta_link': "https://your-frontend.com/dashboard/orders"
+        })
+
+    def send_project_submitted_mail(self, client: Users, freelancer_name: str, project_name: str, escrow_id: str, submission_date: str):
+        subject = "Project Work Submitted for Review 📝"
+        context = {
+            'name': client.username,
+            'freelancer_name': freelancer_name,
+            'project_name': project_name,
+            'submission_date': submission_date,
+            'escrow_id': escrow_id,
+            'cta_link': "https://your-frontend.com/dashboard/orders"
+        }
+        self._render_and_dispatch('project_submitted.html', [client.email], subject, context)
+
+    def send_price_negotiation_offer(self, receiver: Users, initiator: Users, negotiation: PriceNegotiation):
+        subject = f"An Opportunity Awaits!🌟 You've Received a New Offer from {initiator.username}"
+        amount_formatted = f"₦{negotiation.proposed_price_cents / 100:,.2f}"
+        
+        # We don't have the service title directly here, we could add it or just use "Project"
+        context = {
+            'name': receiver.username,
+            'initiator_name': initiator.username,
+            'amount': amount_formatted,
+            'related_item': "Project Service",
+            'cta_link': "https://your-frontend.com/dashboard/negotiations"
+        }
+        self._render_and_dispatch('negotiation_received.html', [receiver.email], subject, context)
+
+    # ─── Escrow ─────────────────────────────────────────────────────────────
+
+    def send_escrow_creation_debit(self, payer: Users, negotiation):
+        subject = "Account Debited by DGE World Escrow Service"
+        context = {
+            'event_title': "Funds Sent to Escrow",
+            'event_type': 'creation_payer',
+            'name': payer.username,
+            'escrow_id': "See Dashboard", # Don't have ID here in original code
+            'amount': f"₦{negotiation.proposed_price_cents / 100:,.2f}",
+            'cta_text': "View Transaction Details",
+            'cta_link': "https://your-frontend.com/dashboard/escrows"
+        }
+        self._render_and_dispatch('escrow_event.html', [payer.email], subject, context)
+
+    def send_escrow_release_credit(self, payee: Users, escrow):
+        subject = "Escrow Funds Released"
+        context = {
+            'event_title': "Funds Released to Your Wallet!",
+            'event_type': 'release_payee',
+            'name': payee.username,
+            'escrow_id': str(escrow.id),
+            'amount': f"₦{escrow.amount_cents / 100:,.2f}",
+            'cta_text': "View Wallet",
+            'cta_link': "https://your-frontend.com/dashboard/wallet"
+        }
+        self._render_and_dispatch('escrow_event.html', [payee.email], subject, context)
+
+    def send_escrow_creation_mail(self, payer: Users, payee: Users, escrow: Escrow):
+        subject = "Escrow Creation"
+        
+        # Send to Payee
+        payee_context = {
+            'event_title': "Escrow Creation",
+            'event_type': 'creation_payee',
+            'name': payee.username,
+            'escrow_id': str(escrow.id),
+            'cta_text': "View Transaction Details",
+            'cta_link': "https://your-frontend.com/dashboard/escrows"
+        }
+        self._render_and_dispatch('escrow_event.html', [payee.email], subject, payee_context)
+        
+        # Send to Payer
+        payer_context = {
+            'event_title': "Escrow Creation",
+            'event_type': 'creation_payer',
+            'name': payer.username,
+            'escrow_id': str(escrow.id),
+            'amount': f"₦{escrow.amount_cents / 100:,.2f}",
+            'cta_text': "View Transaction Details",
+            'cta_link': "https://your-frontend.com/dashboard/escrows"
+        }
+        self._render_and_dispatch('escrow_event.html', [payer.email], subject, payer_context)
+
+    def send_escrow_refund_mail(self, payer: Users, escrow: Escrow):
+        subject = f"Your Escrow Refund is Complete! (₦{escrow.amount_cents / 100:,.2f})"
+        context = {
+            'event_title': "Funds Returned!",
+            'event_type': 'refund_payer',
+            'name': payer.username,
+            'escrow_id': str(escrow.id),
+            'amount': f"₦{escrow.amount_cents / 100:,.2f}",
+            'cta_text': "View Your Wallet",
+            'cta_link': "https://your-frontend.com/dashboard/wallet"
+        }
+        self._render_and_dispatch('escrow_event.html', [payer.email], subject, context)
+
+    def send_escrow_dispute_mail(self, payer: Users, payee: Users, escrow: Escrow):
+        subject = f"Action Required: A Dispute Has Been Opened (Escrow ID {escrow.id})"
+        
+        # Payer
+        self._render_and_dispatch('escrow_event.html', [payer.email], subject, {
+            'event_title': "We're Here to Help",
+            'event_type': 'dispute_payer',
+            'name': payer.username,
+            'escrow_id': str(escrow.id),
+            'cta_text': "Go to Dispute Center",
+            'cta_link': "https://your-frontend.com/dashboard/support"
+        })
+
+        # Payee
+        self._render_and_dispatch('escrow_event.html', [payee.email], subject, {
+            'event_title': "We're Here to Help",
+            'event_type': 'dispute_payee',
+            'name': payee.username,
+            'escrow_id': str(escrow.id),
+            'cta_text': "Go to Dispute Center",
+            'cta_link': "https://your-frontend.com/dashboard/support"
+        })

@@ -4,7 +4,10 @@ from fastapi import HTTPException
 from sqlmodel.ext.asyncio.session import AsyncSession
 from sqlmodel import select
 
-from app.models.price_negotiation import PriceNegotiation, NegotiationType
+from datetime import datetime, timezone, timedelta
+
+from app.models.price_negotiation import PriceNegotiation, NegotiationType, NegotiationStatus
+from app.models.escrow import EscrowStatus
 from app.models.posted_job import PostedJobStatus
 from app.schemas.escrow import EscrowCreate
 from app.schemas.price_negotiation import PriceNegotiationCreate, PriceNegotiationUpdate
@@ -28,6 +31,40 @@ class PriceNegotiationService:
         self.notification_service = EmailNotificationService()
 
     async def create(self, payload: PriceNegotiationCreate, initiator_id: uuid.UUID) -> PriceNegotiation:
+        # Check existing negotiations for advanced logic
+        recent_negotiations = await self.repo.get_recent_negotiations_for_service(
+            initiator_id=initiator_id, service_id=payload.service_id
+        )
+
+        for neg in recent_negotiations:
+            if neg.status == NegotiationStatus.pending:
+                raise HTTPException(
+                    status_code=400,
+                    detail="You already have an active negotiation for this service."
+                )
+            if neg.status == NegotiationStatus.accepted:
+                # If accepted, check if escrow is completed (released or refunded)
+                if neg.escrow and neg.escrow.status not in [EscrowStatus.released, EscrowStatus.refunded]:
+                    raise HTTPException(
+                        status_code=400,
+                        detail="You have an ongoing job for this service."
+                    )
+                # If there's no escrow yet, it might be in transition, block just in case
+                elif not neg.escrow:
+                    raise HTTPException(
+                        status_code=400,
+                        detail="You have an accepted negotiation that is pending escrow creation."
+                    )
+            if neg.status == NegotiationStatus.rejected:
+                # Ensure 24 hours have passed since the rejection
+                if datetime.now(timezone.utc) - neg.updated_at < timedelta(hours=24):
+                    raise HTTPException(
+                        status_code=400,
+                        detail="You can only send another negotiation 24 hours after a rejection."
+                    )
+                # Since the query orders by updated_at desc, we only check the most recent rejection
+                break
+
         negotiation_data = PriceNegotiation(
             service_id=payload.service_id,
             initiator_id=initiator_id,
@@ -74,7 +111,8 @@ class PriceNegotiationService:
             "negotiation_id": str(created_negotiation.id)
         })
 
-        return created_negotiation
+        # Re-fetch with relationships to avoid lazy loading errors during response serialization
+        return await self.repo.get_by_id(created_negotiation.id)
 
     async def bid_on_posted_job(
         self,
@@ -142,7 +180,7 @@ class PriceNegotiationService:
             }
         })
 
-        return created
+        return await self.repo.get_by_id(created.id)
 
     async def get_for_user(self, user_id: uuid.UUID):
         return await self.repo.get_for_user(user_id)
@@ -215,4 +253,4 @@ class PriceNegotiationService:
                 "negotiation_id": str(negotiation.id)
             })
 
-        return result
+        return await self.repo.get_by_id(negotiation.id)

@@ -7,9 +7,25 @@ from sqlalchemy.exc import SQLAlchemyError
 from fastapi import HTTPException
 from sqlmodel import select
 
+from datetime import datetime, timezone
 from app.models.conversation import Conversation, ConversationParticipant
 from app.schemas.conversation import ConversationCreate, ConversationRead, ConversationParticipantCreate, \
     ConversationParticipantRead
+
+
+async def delete_conversation_for_user(conversation_id: UUID, user_id: UUID, db: AsyncSession):
+    stmt = select(ConversationParticipant).where(
+        ConversationParticipant.conversation_id == conversation_id,
+        ConversationParticipant.user_id == user_id
+    )
+    result = await db.exec(stmt)
+    participant = result.first()
+    if participant:
+        participant.left_at = datetime.now(timezone.utc)
+        db.add(participant)
+        await db.commit()
+        return True
+    return False
 
 
 async def insert_conversation_into_db(
@@ -80,7 +96,8 @@ async def get_user_conversations(user_id: UUID, db: AsyncSession) -> List[Conver
     """
     conversation_list = []
     stmt = select(ConversationParticipant).where(
-        ConversationParticipant.user_id == user_id
+        ConversationParticipant.user_id == user_id,
+        ConversationParticipant.left_at.is_(None)
         ).options(selectinload(ConversationParticipant.conversation))
     result = await db.exec(stmt)
     payload = result.all()

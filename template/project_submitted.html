@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h2>Project Work Submitted for Review 📝</h2>
+
+<p>Hi {{ name }},</p>
+
+<p><strong>{{ freelancer_name }}</strong> has submitted their work for your project and it's ready for your review!</p>
+
+<table class="details-table">
+    <tr>
+        <th>Project Name</th>
+        <td>{{ project_name }}</td>
+    </tr>
+    <tr>
+        <th>Submission Date</th>
+        <td>{{ submission_date }}</td>
+    </tr>
+    <tr>
+        <th>Escrow ID</th>
+        <td>{{ escrow_id }}</td>
+    </tr>
+</table>
+
+<p>Please take some time to carefully review the submitted work. If it meets your expectations, you can approve the submission to release the funds from Escrow. If there are issues, you can request revisions or open a dispute.</p>
+
+<div class="cta-container">
+    <a href="{{ cta_link }}" class="cta-button">Review Submission</a>
+</div>
+{% endblock %}

@@ -11,6 +11,8 @@ KYC_UPLOAD_DIR = "uploaded_files/kyc"
 os.makedirs(KYC_UPLOAD_DIR, exist_ok=True)
 PORTFOLIO_UPLOAD_DIR = "uploaded_files/portfolio"
 os.makedirs(PORTFOLIO_UPLOAD_DIR, exist_ok=True)
+POSTED_JOB_UPLOAD_DIR = "uploaded_files/posted_jobs"
+os.makedirs(POSTED_JOB_UPLOAD_DIR, exist_ok=True)
 
 async def save_portfolio_media(file: UploadFile) -> str:
     if not file.content_type.startswith("image/") and not file.content_type.startswith("video/"):
@@ -117,3 +119,19 @@ async def delete_kyc_image(service_image_url: str):
         file_path = os.path.join(KYC_UPLOAD_DIR, filename)
         if os.path.exists(file_path):
             os.remove(file_path)
+
+async def save_posted_job_image(file: UploadFile) -> str:
+    """Saves a posted job image to the filesystem."""
+    if not file.content_type.startswith("image/"):
+        raise HTTPException(status_code=400, detail="Only image files are allowed.")
+    extension = os.path.splitext(file.filename)[1]
+    unique_filename = f"{uuid.uuid4()}{extension}"
+    file_path = os.path.join(POSTED_JOB_UPLOAD_DIR, unique_filename)
+
+    try:
+        async with aiofiles.open(file_path, "wb") as f:
+            while content := await file.read(1024 * 1024):
+                await f.write(content)
+    except Exception:
+        raise HTTPException(status_code=500, detail="Could not save the job image file.")
+    return f"/static/posted_jobs/{unique_filename}"

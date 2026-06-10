@@ -18,3 +18,6 @@ from .transactions import *
 from .conversation import *
 from .permission import *
 from .sys_audit import *
+from .admin import *
+from .payment_request import *
+from .posted_job import *

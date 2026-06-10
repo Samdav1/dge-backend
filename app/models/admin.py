@@ -98,3 +98,70 @@ class AdminSession(SQLModel, table=True):
         sa_column=Column(DateTime(timezone=True), nullable=False),
         default_factory=lambda :datetime.now(timezone.utc)
     )
+
+
+class AdminPaymentSettings(SQLModel, table=True):
+    """Single-row configuration table for platform-wide payment behaviour."""
+    __tablename__ = "admin_payment_settings"
+
+    id: int = Field(default=1, primary_key=True)  # Always row id=1
+    # When True, withdrawal requests are automatically transferred without admin review
+    auto_approve_withdrawals: bool = Field(default=False, nullable=False)
+    # When True, confirmed Monnify deposits are held for admin approval before crediting wallet
+    screen_deposits: bool = Field(default=False, nullable=False)
+    updated_at: datetime = Field(
+        sa_column=Column(DateTime(timezone=True), nullable=False),
+        default_factory=lambda: datetime.now(timezone.utc)
+    )
+    updated_by_admin_id: Optional[UUID] = Field(default=None, foreign_key="superadmin.id")
+
+
+class FeeType(str, Enum):
+    percentage = "percentage"  # e.g. 5 = 5%
+    flat = "flat"              # e.g. 500 = 500 cents (₦5.00)
+
+
+class PlatformFeeConfig(SQLModel, table=True):
+    """Single-row configuration table for platform fee and commission settings."""
+    __tablename__ = "platform_fee_config"
+
+    id: int = Field(default=1, primary_key=True)  # Always row id=1
+
+    # Escrow release fee (charged on service/project payouts)
+    escrow_release_fee_enabled: bool = Field(default=True, nullable=False)
+    escrow_release_fee_type: FeeType = Field(default=FeeType.percentage, nullable=False)
+    escrow_release_fee_value: float = Field(default=5.0, nullable=False)  # 5%
+
+    # Deposit fee
+    deposit_fee_enabled: bool = Field(default=False, nullable=False)
+    deposit_fee_type: FeeType = Field(default=FeeType.percentage, nullable=False)
+    deposit_fee_value: float = Field(default=0.0, nullable=False)
+
+    # Withdrawal fee
+    withdrawal_fee_enabled: bool = Field(default=True, nullable=False)
+    withdrawal_fee_type: FeeType = Field(default=FeeType.percentage, nullable=False)
+    withdrawal_fee_value: float = Field(default=1.0, nullable=False)  # 1%
+
+    updated_at: datetime = Field(
+        sa_column=Column(DateTime(timezone=True), nullable=False),
+        default_factory=lambda: datetime.now(timezone.utc)
+    )
+    updated_by_admin_id: Optional[UUID] = Field(default=None, foreign_key="superadmin.id")
+
+
+class PlatformRevenueLog(SQLModel, table=True):
+    """Log to record every fee collected by the platform."""
+    __tablename__ = "platform_revenue_logs"
+
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    event_type: str = Field(nullable=False)  # "escrow_release", "deposit", "withdrawal"
+    user_id: uuid.UUID = Field(foreign_key="users.id", nullable=False)
+    gross_amount_cents: int = Field(nullable=False)  # original amount
+    fee_amount_cents: int = Field(nullable=False)    # collected fee
+    fee_type: FeeType = Field(nullable=False)        # type of fee applied
+    fee_value: float = Field(nullable=False)         # configured fee value
+    reference: str = Field(nullable=False)           # reference to transaction / escrow ID
+    created_at: datetime = Field(
+        sa_column=Column(DateTime(timezone=True), nullable=False),
+        default_factory=lambda: datetime.now(timezone.utc)
+    )

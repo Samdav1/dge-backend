@@ -1,5 +1,5 @@
 from app.repositories.portfolio_repo import create_portfolio_repo, update_portfolio_repo
-from app.schemas.portfolio import UserPortfolioRead, UserPortfolioCreate, UserPortfolioUpdate, PortfolioMediaUpdate
+from app.schemas.portfolio import UserPortfolioRead, UserPortfolioCreate, UserPortfolioUpdate, PortfolioMediaUpdate, UserPortfolioWithMediaRead
 import uuid
 from fastapi import UploadFile, HTTPException, status
 from sqlmodel.ext.asyncio.session import AsyncSession
@@ -63,7 +63,10 @@ async def update_portfolio_media_service(db: AsyncSession, user_id, media_update
     )
     return PortfolioMediaRead.model_validate(updated_media)
 
-async def get_user_portfolio_service(db: AsyncSession, user_id) -> UserPortfolioRead:
+async def delete_portfolio_media_service(db: AsyncSession, *, media_id, user_id) -> bool:
+    return await portfolio_repo.delete_media_repo(db=db, media_id=media_id, user_id=user_id)
+
+async def get_user_portfolio_service(db: AsyncSession, user_id) -> UserPortfolioWithMediaRead:
     """
 
     :param db:

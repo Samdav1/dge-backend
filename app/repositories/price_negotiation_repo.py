@@ -62,6 +62,21 @@ class PriceNegotiationRepository:
         await self.db.refresh(negotiation)
         return negotiation
 
+    async def get_recent_negotiations_for_service(self, initiator_id: uuid.UUID, service_id: uuid.UUID) -> List[PriceNegotiation]:
+        """
+        Fetches negotiations for a specific user and service, ordered by updated_at descending.
+        """
+        query = select(PriceNegotiation).where(
+            PriceNegotiation.initiator_id == initiator_id,
+            PriceNegotiation.service_id == service_id
+        ).options(
+            selectinload(PriceNegotiation.escrow)
+        ).order_by(PriceNegotiation.updated_at.desc())
+        
+        result = await self.db.execute(query)
+        return result.scalars().all()
+
+
     async def get_user_by_id(self, user_id):
         stmt = select(Users).where(Users.id == user_id)
         result = await self.db.exec(stmt)

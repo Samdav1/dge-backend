@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h2>An Opportunity Awaits! 🤝</h2>
+
+<p>Hi {{ name }},</p>
+
+<p>Your unique talent has caught someone's eye! <strong>{{ initiator_name }}</strong> is excited by what you offer and has reached out with a project proposal.</p>
+
+<table class="details-table">
+    <tr>
+        <th>Proposed Price</th>
+        <td style="color: #0ea5e9;">{{ amount }}</td>
+    </tr>
+    <tr>
+        <th>Potential Client</th>
+        <td>{{ initiator_name }}</td>
+    </tr>
+    <tr>
+        <th>Service/Job</th>
+        <td>{{ related_item }}</td>
+    </tr>
+</table>
+
+<p>This is more than a transaction; it's the start of a potential collaboration. Every great project begins with a conversation, and yours is waiting to begin.</p>
+
+<div class="cta-container">
+    <a href="{{ cta_link }}" class="cta-button">Review Offer & Respond</a>
+</div>
+{% endblock %}

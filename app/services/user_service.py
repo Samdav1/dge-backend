@@ -1,6 +1,6 @@
 from fastapi.concurrency import run_in_threadpool
 from app.models import Users
-from app.repositories.user_repo import create_user, get_user_by_email
+from app.repositories.user_repo import create_user, get_user_by_email, get_user_by_referral_code
 from passlib.hash import pbkdf2_sha256 as encrypt
 from sqlmodel import select, Session
 from sqlmodel.ext.asyncio.session import AsyncSession
@@ -26,17 +26,26 @@ async def create_user_service(db: AsyncSession, user: UserCreate):
     """
     hash_pass = await run_in_threadpool(encrypt.hash, user.password)
     user_info = await create_user(db=db, user=user, password=hash_pass)
-    user = UserRead.model_validate(user_info)
-    token = await get_access_token(str(user.id))
+    
+    if user.referral_code:
+        referrer = await get_user_by_referral_code(user.referral_code, db)
+        if referrer:
+            user_info.referred_by_id = referrer.id
+            db.add(user_info)
+            await db.commit()
+            await db.refresh(user_info)
+
+    user_read = UserRead.model_validate(user_info)
+    token = await get_access_token(str(user_read.id))
 
     """Creating User Wallet Service"""
-    if not await get_user_wallet_service(db, user.id):
-        await create_user_wallet_service(db, user.id)
+    if not await get_user_wallet_service(db, user_read.id):
+        await create_user_wallet_service(db, user_read.id)
 
     notification_service = NotificationService()
-    notification_service.send_signup_welcome_mail(user)
+    notification_service.send_signup_welcome_mail(user_read)
 
-    return {"user": user, "access_token": token}
+    return {"user": user_read, "access_token": token}
 
 async def google_auth_login(token: GoogleCallBack, db: AsyncSession):
     """
@@ -48,7 +57,7 @@ async def google_auth_login(token: GoogleCallBack, db: AsyncSession):
     user_info = id_token.verify_oauth2_token(
         token.id_token,
         requests.Request(),
-        GOOGLE_CLIENT_ID,
+        GOOGLE_CLIENT_ID, clock_skew_in_seconds=10
     )
 
     user_email = user_info["email"]
@@ -71,7 +80,7 @@ async def google_auth_signup(token: GoogleCallBack, db: AsyncSession, referral_c
     user_info = id_token.verify_oauth2_token(
         token.id_token,
         requests.Request(),
-        GOOGLE_CLIENT_ID,
+        GOOGLE_CLIENT_ID, clock_skew_in_seconds=10
     )
 
     print(user_info)
@@ -87,6 +96,15 @@ async def google_auth_signup(token: GoogleCallBack, db: AsyncSession, referral_c
             referral_code=referral_code,
         )
         user_info = await create_user(db=db, user=new_user)
+        
+        if referral_code:
+            referrer = await get_user_by_referral_code(referral_code, db)
+            if referrer:
+                user_info.referred_by_id = referrer.id
+                db.add(user_info)
+                await db.commit()
+                await db.refresh(user_info)
+
         user = UserRead.model_validate(user_info)
         token = await get_access_token(str(user.id))
 

@@ -1,7 +1,7 @@
 from fastapi import HTTPException, UploadFile
 
 from app.repositories import kyc_repo
-from app.repositories.kyc_repo import create_user_repo_kyc, update_user_repo_kyc
+from app.repositories.kyc_repo import create_user_repo_kyc, update_user_repo_kyc, get_user_kyc_repo
 from sqlmodel.ext.asyncio.session import AsyncSession
 from app.schemas.kyc import *
 from app.schemas.user import UserRead
@@ -27,3 +27,6 @@ async def update_user_service_kyc(db: AsyncSession, user_kyc: KYCUpdate, user_id
             return kyc_data_refined
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"{str(e),}, Error in update_user_repo_kyc")
+
+async def get_user_kyc_service(db: AsyncSession, user_id) -> KYCRead | None:
+    return await get_user_kyc_repo(db, user_id)

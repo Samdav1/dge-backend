@@ -71,6 +71,11 @@ class TeamRepository:
         result = await self.db.exec(stmt)
         return result.first()
 
+    async def get_team_user_by_email(self, email: str) -> TeamUsers | None:
+        stmt = select(TeamUsers).where(TeamUsers.email == email)
+        result = await self.db.exec(stmt)
+        return result.first()
+
     async def get_team_users(self) -> list[TeamUsers]:
         stmt = select(TeamUsers).order_by(TeamUsers.created_at.desc())
         result = await self.db.exec(stmt)

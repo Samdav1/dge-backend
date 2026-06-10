@@ -160,14 +160,23 @@ class EscrowService:
             raise HTTPException(status_code=403, detail="Not authorized to release this escrow")
 
         try:
-            await update_user_wallet_balance_repo_ext(db=self.db, credentials=payee_wallet.user_id, wallet_type=payee_wallet.wallet_type, amount=escrow.amount_cents)
+            from app.services.fee_service import fee_service
+            fee_cents, net_cents = await fee_service.apply_fee(
+                db=self.db,
+                event_type="escrow_release",
+                user_id=payee_wallet.user_id,
+                gross_amount_cents=escrow.amount_cents,
+                reference=str(escrow.id)
+            )
+
+            await update_user_wallet_balance_repo_ext(db=self.db, credentials=payee_wallet.user_id, wallet_type=payee_wallet.wallet_type, amount=net_cents)
 
             execute_transact = TransactionRepository(db=self.db)
             txn_data = TransactionCreate(
                 wallet_id=payee_wallet.id,
                 users_id=payee_wallet.user_id,
                 type=TxnType.deposit,
-                amount_cents=escrow.amount_cents,
+                amount_cents=net_cents,
                 status=TxnStatus.completed,
                 reference=f"escrow_release_{escrow.id}"
             )

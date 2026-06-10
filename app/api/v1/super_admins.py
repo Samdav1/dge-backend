@@ -3,6 +3,7 @@ from fastapi import APIRouter, Depends, UploadFile, Form, status, Response, HTTP
 from sqlmodel.ext.asyncio.session import AsyncSession
 from typing import Optional, List
 import uuid
+from datetime import datetime, timezone
 
 from watchfiles.run import get_tty_path
 
@@ -1094,7 +1095,7 @@ async def list_admin_kyc(
     items = []
     for kyc, user in rows:
         items.append({
-            "id": str(kyc.id),
+            "id": str(kyc.user_id),
             "user_id": str(user.id),
             "name": f"{getattr(user, 'first_name', '')} {getattr(user, 'last_name', '')}".strip() or user.username,
             "email": user.email,
@@ -1139,7 +1140,7 @@ async def get_admin_kyc_detail(user_id: str, db: AsyncSession = Depends(get_sess
     kyc, user = result[0]
     
     return {
-        "id": str(kyc.id),
+        "id": str(kyc.user_id),
         "user_id": str(user.id),
         "name": f"{getattr(user, 'first_name', '')} {getattr(user, 'last_name', '')}".strip() or user.username,
         "email": user.email,
@@ -1686,3 +1687,315 @@ async def get_admin_ticket(
         raise HTTPException(status_code=404, detail="Ticket not found")
         
     return ticket
+
+
+# ════════════════════════════════════════════════════════════════════════════
+#  ADMIN PAYMENT MANAGEMENT ENDPOINTS
+# ════════════════════════════════════════════════════════════════════════════
+
+@router.get("/payment-settings")
+async def get_payment_settings(db: AsyncSession = Depends(get_session)):
+    """Return the current platform payment settings."""
+    from app.services.payment_service import get_payment_settings as _get_settings
+    settings = await _get_settings(db)
+    return {
+        "id": settings.id,
+        "auto_approve_withdrawals": settings.auto_approve_withdrawals,
+        "screen_deposits": settings.screen_deposits,
+        "updated_at": settings.updated_at.isoformat() if settings.updated_at else None,
+    }
+
+
+@router.put("/payment-settings")
+async def update_payment_settings(
+    req: Request,
+    db: AsyncSession = Depends(get_session),
+):
+    """Update platform-wide payment settings (auto-approve, deposit screening)."""
+    from app.services.payment_service import update_payment_settings as _update_settings
+    try:
+        body = await req.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid JSON body")
+
+    auto_approve = body.get("auto_approve_withdrawals")
+    screen = body.get("screen_deposits")
+
+    settings = await _update_settings(db, auto_approve, screen)
+    return {
+        "id": settings.id,
+        "auto_approve_withdrawals": settings.auto_approve_withdrawals,
+        "screen_deposits": settings.screen_deposits,
+        "updated_at": settings.updated_at.isoformat() if settings.updated_at else None,
+    }
+
+
+@router.get("/withdrawals")
+async def list_withdrawals(
+    status: Optional[str] = None,
+    page: int = 1,
+    limit: int = 50,
+    db: AsyncSession = Depends(get_session),
+):
+    """List all withdrawal requests with optional status filter."""
+    from sqlmodel import select, func
+    from app.models.payment_request import WithdrawalRequest, WithdrawalStatus, UserBankAccount
+    from app.models.user import Users
+
+    stmt = select(WithdrawalRequest)
+    if status:
+        try:
+            stmt = stmt.where(WithdrawalRequest.status == WithdrawalStatus(status.lower()))
+        except ValueError:
+            pass
+
+    total_res = await db.execute(select(func.count()).select_from(stmt.subquery()))
+    total = total_res.scalar() or 0
+
+    stmt = stmt.order_by(WithdrawalRequest.created_at.desc()).offset((page - 1) * limit).limit(limit)
+    res = await db.execute(stmt)
+    withdrawals = res.scalars().all()
+
+    rows = []
+    for w in withdrawals:
+        user_res = await db.execute(select(Users).where(Users.id == w.user_id))
+        user = user_res.scalar_one_or_none()
+
+        bank_res = await db.execute(select(UserBankAccount).where(UserBankAccount.id == w.bank_account_id))
+        bank = bank_res.scalar_one_or_none()
+
+        rows.append({
+            "id": str(w.id),
+            "user_id": str(w.user_id),
+            "user_email": user.email if user else None,
+            "user_name": user.username if user else None,
+            "amount_cents": w.amount_cents,
+            "amount": f"₦{w.amount_cents / 100:,.2f}",
+            "currency": w.currency,
+            "status": w.status.value,
+            "rejection_reason": w.rejection_reason,
+            "bank_account_number": bank.account_number if bank else None,
+            "bank_account_name": bank.account_name if bank else None,
+            "bank_name": bank.bank_name if bank else None,
+            "monnify_reference": w.monnify_reference,
+            "reviewed_at": w.reviewed_at.isoformat() if w.reviewed_at else None,
+            "created_at": w.created_at.isoformat() if w.created_at else None,
+        })
+
+    return {"withdrawals": rows, "total": total, "page": page, "limit": limit}
+
+
+@router.post("/withdrawals/{withdrawal_id}/approve")
+async def approve_withdrawal(
+    withdrawal_id: str,
+    db: AsyncSession = Depends(get_session),
+):
+    """Approve a pending withdrawal — triggers Monnify disbursement."""
+    from app.services.payment_service import admin_approve_withdrawal
+    try:
+        wid = uuid.UUID(withdrawal_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid withdrawal_id")
+
+    # Using a fixed placeholder admin_id since we don't enforce admin auth here yet
+    admin_id = uuid.uuid4()  # Replace with get_current_admin().id when wired
+    withdrawal = await admin_approve_withdrawal(db, wid, admin_id)
+    return {"message": "Withdrawal approved and transfer initiated", "status": withdrawal.status.value}
+
+
+@router.post("/withdrawals/{withdrawal_id}/reject")
+async def reject_withdrawal(
+    withdrawal_id: str,
+    req: Request,
+    db: AsyncSession = Depends(get_session),
+):
+    """Reject a pending withdrawal with a reason."""
+    from app.services.payment_service import admin_reject_withdrawal
+    try:
+        wid = uuid.UUID(withdrawal_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid withdrawal_id")
+
+    try:
+        body = await req.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid JSON body")
+
+    reason = body.get("reason", "No reason provided")
+    admin_id = uuid.uuid4()  # Replace with get_current_admin().id when wired
+    withdrawal = await admin_reject_withdrawal(db, wid, admin_id, reason)
+    return {"message": "Withdrawal rejected", "status": withdrawal.status.value}
+
+
+@router.get("/deposits")
+async def list_deposits(
+    status: Optional[str] = None,
+    page: int = 1,
+    limit: int = 50,
+    db: AsyncSession = Depends(get_session),
+):
+    """List all deposit requests. Use status=screened_pending to see the review queue."""
+    from sqlmodel import select, func
+    from app.models.payment_request import DepositRequest, DepositStatus
+    from app.models.user import Users
+
+    stmt = select(DepositRequest)
+    if status:
+        try:
+            stmt = stmt.where(DepositRequest.status == DepositStatus(status.lower()))
+        except ValueError:
+            pass
+
+    total_res = await db.execute(select(func.count()).select_from(stmt.subquery()))
+    total = total_res.scalar() or 0
+
+    stmt = stmt.order_by(DepositRequest.created_at.desc()).offset((page - 1) * limit).limit(limit)
+    res = await db.execute(stmt)
+    deposits = res.scalars().all()
+
+    rows = []
+    for d in deposits:
+        user_res = await db.execute(select(Users).where(Users.id == d.user_id))
+        user = user_res.scalar_one_or_none()
+
+        rows.append({
+            "id": str(d.id),
+            "user_id": str(d.user_id),
+            "user_email": user.email if user else None,
+            "user_name": user.username if user else None,
+            "amount_cents": d.amount_cents,
+            "amount": f"₦{d.amount_cents / 100:,.2f}",
+            "currency": d.currency,
+            "status": d.status.value,
+            "monnify_reference": d.monnify_reference,
+            "payment_link": d.payment_link,
+            "created_at": d.created_at.isoformat() if d.created_at else None,
+        })
+
+    return {"deposits": rows, "total": total, "page": page, "limit": limit}
+
+
+@router.post("/deposits/{deposit_id}/approve")
+async def approve_deposit(
+    deposit_id: str,
+    db: AsyncSession = Depends(get_session),
+):
+    """Approve a screened (held) deposit — credits user's wallet."""
+    from app.services.payment_service import admin_approve_deposit
+    try:
+        did = uuid.UUID(deposit_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid deposit_id")
+
+    admin_id = uuid.uuid4()  # Replace with get_current_admin().id when wired
+    deposit = await admin_approve_deposit(db, did, admin_id)
+    return {"message": "Deposit approved and wallet credited", "status": deposit.status.value}
+
+
+@router.get("/fee-config")
+async def get_fee_config(db: AsyncSession = Depends(get_session)):
+    from app.services.fee_service import fee_service
+    config = await fee_service.get_fee_config(db)
+    return config
+
+
+@router.put("/fee-config")
+async def update_fee_config(
+    req: Request,
+    db: AsyncSession = Depends(get_session),
+):
+    from app.services.fee_service import fee_service
+    config = await fee_service.get_fee_config(db)
+    try:
+        body = await req.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid JSON body")
+
+    for k, v in body.items():
+        if hasattr(config, k):
+            setattr(config, k, v)
+
+    config.updated_at = datetime.now(timezone.utc)
+    db.add(config)
+    await db.commit()
+    await db.refresh(config)
+    return config
+
+
+@router.get("/revenue")
+async def get_platform_revenue(
+    page: int = 1,
+    limit: int = 50,
+    event_type: Optional[str] = None,
+    db: AsyncSession = Depends(get_session),
+):
+    from sqlmodel import select, func
+    from app.models.admin import PlatformRevenueLog
+    from app.models.user import Users
+
+    # 1. Total revenue stats
+    # All time
+    all_time_stmt = select(func.sum(PlatformRevenueLog.fee_amount_cents))
+    all_time_res = await db.execute(all_time_stmt)
+    total_all_time = all_time_res.scalar() or 0
+
+    # This month
+    now = datetime.now(timezone.utc)
+    start_of_month = datetime(now.year, now.month, 1, tzinfo=timezone.utc)
+    month_stmt = select(func.sum(PlatformRevenueLog.fee_amount_cents)).where(PlatformRevenueLog.created_at >= start_of_month)
+    month_res = await db.execute(month_stmt)
+    total_this_month = month_res.scalar() or 0
+
+    # Today
+    start_of_today = datetime(now.year, now.month, now.day, tzinfo=timezone.utc)
+    today_stmt = select(func.sum(PlatformRevenueLog.fee_amount_cents)).where(PlatformRevenueLog.created_at >= start_of_today)
+    today_res = await db.execute(today_stmt)
+    total_today = today_res.scalar() or 0
+
+    # 2. Get paginated revenue logs
+    stmt = select(PlatformRevenueLog)
+    if event_type:
+        stmt = stmt.where(PlatformRevenueLog.event_type == event_type)
+
+    total_count_res = await db.execute(select(func.count()).select_from(stmt.subquery()))
+    total_count = total_count_res.scalar() or 0
+
+    stmt = stmt.order_by(PlatformRevenueLog.created_at.desc()).offset((page - 1) * limit).limit(limit)
+    res = await db.execute(stmt)
+    logs = res.scalars().all()
+
+    rows = []
+    for log in logs:
+        user_res = await db.execute(select(Users).where(Users.id == log.user_id))
+        user = user_res.scalar_one_or_none()
+        rows.append({
+            "id": str(log.id),
+            "event_type": log.event_type,
+            "user_id": str(log.user_id),
+            "user_email": user.email if user else None,
+            "user_name": user.username if user else None,
+            "gross_amount_cents": log.gross_amount_cents,
+            "gross_amount": f"₦{log.gross_amount_cents / 100:,.2f}",
+            "fee_amount_cents": log.fee_amount_cents,
+            "fee_amount": f"₦{log.fee_amount_cents / 100:,.2f}",
+            "fee_type": log.fee_type,
+            "fee_value": log.fee_value,
+            "reference": log.reference,
+            "created_at": log.created_at.isoformat() if log.created_at else None,
+        })
+
+    return {
+        "revenue_logs": rows,
+        "total_count": total_count,
+        "page": page,
+        "limit": limit,
+        "stats": {
+            "total_all_time": total_all_time,
+            "total_this_month": total_this_month,
+            "total_today": total_today,
+            "total_all_time_formatted": f"₦{total_all_time / 100:,.2f}",
+            "total_this_month_formatted": f"₦{total_this_month / 100:,.2f}",
+            "total_today_formatted": f"₦{total_today / 100:,.2f}",
+        }
+    }
+

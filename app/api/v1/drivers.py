@@ -51,7 +51,7 @@ from app.services.redis_location import RedisLocationService
 from app.services.pricing_service import calculate_trip_fare
 from app.repositories.trip_repo import TripRepository
 
-router = APIRouter(prefix="/drivers", tags=["Drivers"])
+router = APIRouter(tags=["Drivers"])
 
 
 # ---------------------------------------------------------------------------
@@ -401,9 +401,9 @@ async def get_my_trips_as_driver(
     """Returns the driver's trip history (newest first)."""
     try:
         driver_profile = await driver_service.get_driver_profile(current_user.id)
-    except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
-    return await repo.get_trips_for_driver(driver_profile.id, limit=limit)
+        return await repo.get_trips_for_driver(driver_profile.id, limit=limit)
+    except ValueError:
+        return []
 
 
 @router.get(

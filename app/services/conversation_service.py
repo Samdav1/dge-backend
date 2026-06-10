@@ -4,7 +4,12 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.models import ConversationParticipant
 from app.schemas.conversation import ConversationCreate, ConversationRead, ConversationParticipantCreate, ConversationParticipantRead
-from app.repositories.conversation_repo import insert_conversation_into_db, ConversationParticipantRepository, get_user_conversations
+from app.repositories.conversation_repo import (
+    insert_conversation_into_db, 
+    ConversationParticipantRepository, 
+    get_user_conversations,
+    delete_conversation_for_user
+)
 
 
 async def create_conversation_service(
@@ -32,6 +37,9 @@ async def get_user_conversation_service(
     """
     result = await get_user_conversations(user_id, db)
     return result
+
+async def delete_conversation_service(conversation_id: UUID, user_id: UUID, db: AsyncSession):
+    return await delete_conversation_for_user(conversation_id, user_id, db)
 
 
 class ConversationParticipantService:

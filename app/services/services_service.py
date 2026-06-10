@@ -48,8 +48,8 @@ class ServiceService:
         )
         return await self.repo.create(service, payload.category_ids)
 
-    async def list_services(self, *, user_id=None, status=None, type=None, search=None, category_id=None) -> List[Service]:
-        return await self.repo.list(user_id=user_id, status=status, type=type, search=search, category_id=category_id)
+    async def list_services(self, *, user_id=None, status=None, type=None, search=None, category_id=None, offset: int = 0, limit: int = 100, sort_by: str = "newest") -> List[Service]:
+        return await self.repo.list(user_id=user_id, status=status, type=type, search=search, category_id=category_id, offset=offset, limit=limit, sort_by=sort_by)
 
     async def get_service(self, service_id: uuid.UUID):
         service = await self.repo.get(service_id)

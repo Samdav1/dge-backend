@@ -32,11 +32,11 @@ async def get_transaction(txn_id: UUID, user_id: UserRead = Depends(get_current_
     return txn
 
 
-@router.get("/user/{user_id}", response_model=List[TransactionRead])
-async def get_user_transactions(user_id: UserRead = Depends(get_current_user), db: AsyncSession = Depends(get_session)):
+@router.get("/user/", response_model=List[TransactionRead])
+async def get_user_transactions(current_user: UserRead = Depends(get_current_user), db: AsyncSession = Depends(get_session)):
     repo = TransactionRepository(db)
     service = TransactionService(repo)
-    return await service.get_user_transactions(str(user_id.id))
+    return await service.get_user_transactions(str(current_user.id))
 
 
 @router.put("/{txn_id}", response_model=TransactionRead)

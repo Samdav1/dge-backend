@@ -58,3 +58,9 @@ async def get_user_by_email(email: str, db: AsyncSession):
     if user is None:
         return None
     return user
+
+async def get_user_by_referral_code(referral_code: str, db: AsyncSession):
+    stmt = select(Users).where(Users.referral_code == referral_code)
+    result = await db.exec(stmt)
+    user = result.first()
+    return user

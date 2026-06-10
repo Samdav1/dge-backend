@@ -19,8 +19,9 @@ from .services import Service, ServiceCategory
 from .price_negotiation import PriceNegotiation
 from .work_submissions import WorkSubmission
 from .notifications import Notification, AdminNotification
-from .admin import SuperAdmin
+from .admin import SuperAdmin, AdminPaymentSettings, FeeType, PlatformFeeConfig, PlatformRevenueLog
 from .posted_job import PostedJob
+from .payment_request import DepositRequest, WithdrawalRequest, UserBankAccount
 
 __all__ = [
     "AdminNotification",
@@ -65,4 +66,11 @@ __all__ = [
     "TripStatus",
     "RideStatus",
     "PostedJob",
+    "AdminPaymentSettings",
+    "DepositRequest",
+    "WithdrawalRequest",
+    "UserBankAccount",
+    "FeeType",
+    "PlatformFeeConfig",
+    "PlatformRevenueLog",
 ]

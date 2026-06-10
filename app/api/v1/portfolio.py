@@ -79,6 +79,19 @@ async def update_portfolio_media(
         raise HTTPException(status_code= 500, detail=f"Error Updating Portfolio Media, {str(error)}")
     return updated_media
 
+@router.delete("/delete_portfolio_media/{media_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_portfolio_media(
+    media_id,
+    db: AsyncSession = Depends(get_session),
+    current_user: UserRead = Depends(get_current_user)
+    ):
+    await portfolio_service.delete_portfolio_media_service(
+        db=db,
+        media_id=media_id,
+        user_id=current_user.id
+    )
+    return None
+
 @router.get("/get_user_portfolio", response_model=UserPortfolioWithMediaRead)
 async def get_user_portfolio(db: AsyncSession = Depends(get_session), current_user: UserRead = Depends(get_current_user)):
     """

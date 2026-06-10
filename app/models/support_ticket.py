@@ -67,7 +67,7 @@ class SupportTicketReply(SQLModel, table=True):
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True, index=True)
 
     # Foreign keys
-    ticket_id: uuid.UUID = Field(foreign_key="support_tickets.id", nullable=False, index=True, ondelete="CASCADE")
+    ticket_id: uuid.UUID = Field(foreign_key="support_tickets.id", nullable=False, index=True)
     author_user_id: Optional[uuid.UUID] = Field(
         default=None, foreign_key="users.id", index=True
     )

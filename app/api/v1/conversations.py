@@ -10,7 +10,12 @@ from app.repositories.conversation_repo import ConversationParticipantRepository
 from app.schemas.user import UserRead
 from app.schemas.conversation import ConversationCreate, ConversationRead, ConversationParticipantRead, \
     ConversationParticipantCreate
-from app.services.conversation_service import create_conversation_service, ConversationParticipantService, get_user_conversation_service
+from app.services.conversation_service import (
+    create_conversation_service, 
+    ConversationParticipantService, 
+    get_user_conversation_service,
+    delete_conversation_service
+)
 
 router = APIRouter()
 
@@ -41,6 +46,18 @@ async def get_user_conversations(current_user: UserRead = Depends(get_current_us
 
     result = await get_user_conversation_service(current_user.id, db)
     return result
+
+@router.delete("/conversations/{conversation_id}")
+async def delete_conversation(
+    conversation_id: UUID,
+    current_user: UserRead = Depends(get_current_user),
+    db: AsyncSession = Depends(get_session)
+):
+    """Delete a conversation for the current user."""
+    success = await delete_conversation_service(conversation_id, current_user.id, db)
+    if not success:
+        raise HTTPException(status_code=404, detail="Conversation not found or already deleted")
+    return {"message": "Conversation deleted successfully"}
 
 
 @router.post("/add_conversation_participant", response_model=ConversationParticipantRead)

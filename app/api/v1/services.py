@@ -72,6 +72,9 @@ async def list_services(
         only_mine: Optional[bool] = False,
         search: Optional[str] = None,
         category_id: Optional[uuid.UUID] = None,
+        offset: int = 0,
+        limit: int = 100,
+        sort_by: str = "newest",
         db: AsyncSession = Depends(get_session),
         current_user: UserRead = Depends(get_current_user),
         service: ServiceService = Depends(get_service_service),
@@ -80,7 +83,7 @@ async def list_services(
     status_enum = ServiceStatus(status) if status else None
     type_enum = ServiceType(type) if type else None
     user_id = current_user.id if only_mine else None
-    results = await service.list_services(user_id=user_id, status=status_enum, type=type_enum, search=search, category_id=category_id)
+    results = await service.list_services(user_id=user_id, status=status_enum, type=type_enum, search=search, category_id=category_id, offset=offset, limit=limit, sort_by=sort_by)
     return results
 
 

@@ -7,10 +7,10 @@ from app.schemas.user import *
 from sqlmodel import SQLModel, Session
 from fastapi import Depends
 from app.db.session import get_session
-from app.services.auth_service import login
+from app.services.auth_service import login, team_login
 from app.core.security import get_access_token
 from app.repositories.refresh_token_repo import get_by_token, revoke
-from app.services.auth_service import rotate_refresh_token, send_password_reset_link_service, change_user_pass_service
+from app.services.auth_service import rotate_refresh_token, send_password_reset_link_service, change_user_pass_service, send_team_password_reset_link_service, change_team_user_pass_service
 from app.services.auth_service import issue_refresh_token
 from app.services.user_service import google_auth_login, google_auth_signup, create_user_service
 import asyncio
@@ -52,6 +52,29 @@ async def login_for_access_token(response: Response, form_data: OAuth2PasswordRe
         "password": form_data.password
     })
     data = await login(user_ifo, db)
+    id_value = str(data.id)
+    token = await get_access_token(subject=id_value)
+    refresh_token = await issue_refresh_token(user_id=id_value, db=db)
+
+    response.set_cookie(
+        key="refresh_token",
+        value=refresh_token.token,
+        httponly=True,
+        secure=True,
+        samesite="lax",
+        max_age=7 * 24 * 60 * 60
+    )
+
+    return {"access_token": token, "token_type": "bearer", "user": data}
+
+
+@router.post("/team-login")
+async def login_for_team_access_token(response: Response, form_data: OAuth2PasswordRequestForm = Depends(), db: AsyncSession = Depends(get_session)):
+    user_ifo = UserLogin.model_validate({
+        "username": form_data.username,
+        "password": form_data.password
+    })
+    data = await team_login(user_ifo, db)
     id_value = str(data.id)
     token = await get_access_token(subject=id_value)
     refresh_token = await issue_refresh_token(user_id=id_value, db=db)
@@ -148,6 +171,24 @@ async def change_user_password(password_info: ChangeUserPass, db: AsyncSession =
 
     if password_info:
         response = await change_user_pass_service(user_pass=password_info, db=db)
+        return response
+    else:
+        from starlette import status
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Invalid password credentials")
+
+@router.post("/team-change_password_email")
+async def send_team_password_reset_link(email: EmailStr, db: AsyncSession = Depends(get_session)):
+    if email:
+        response = await send_team_password_reset_link_service(email=email, db=db)
+        return response
+    else:
+        from starlette import status
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Invalid email credentials")
+
+@router.put("/team-change_password")
+async def change_team_password(password_info: ChangeUserPass, db: AsyncSession = Depends(get_session)):
+    if password_info:
+        response = await change_team_user_pass_service(user_pass=password_info, db=db)
         return response
     else:
         from starlette import status

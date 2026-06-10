@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h2>{{ event_title }}</h2>
+
+<p>Hi {{ name }},</p>
+
+{% if event_type == 'creation_payer' %}
+<p>Just a quick confirmation! Your escrow payment has been successfully sent from your wallet and is now securely held in Escrow. The funds are safe and will only be released when you approve the work.</p>
+
+{% elif event_type == 'creation_payee' %}
+<p>This is a confirmation that an Escrow has been created for your project. The funds are securely held by DGE World, so you can begin working with peace of mind!</p>
+
+{% elif event_type == 'release_payee' %}
+<p>Great news! The escrow payment has been successfully released and deposited into your <strong>Earnings Wallet</strong>.</p>
+
+{% elif event_type == 'refund_payer' %}
+<p>We've successfully processed your refund. The funds are now back in your wallet.</p>
+<p>We believe in a fair and transparent community, and we're here to ensure every interaction feels secure. While this one didn't work out, we're ready for your next connection!</p>
+
+{% elif event_type == 'dispute_payer' or event_type == 'dispute_payee' %}
+<p>A dispute request has been opened for this Escrow. Don't worry, the funds are held securely while our team reviews the situation.</p>
+<p>Our goal is always a fair outcome. We see this not as a conflict, but as a chance to find clarity together. Please provide any details that can help us understand your side of the story.</p>
+
+{% endif %}
+
+<table class="details-table">
+    <tr>
+        <th>Escrow ID</th>
+        <td>{{ escrow_id }}</td>
+    </tr>
+    {% if amount %}
+    <tr>
+        <th>Amount</th>
+        {% if event_type == 'release_payee' or event_type == 'refund_payer' %}
+        <td style="color: #10b981;">+{{ amount }}</td>
+        {% else %}
+        <td>{{ amount }}</td>
+        {% endif %}
+    </tr>
+    {% endif %}
+</table>
+
+<div class="cta-container">
+    <a href="{{ cta_link }}" class="cta-button">{{ cta_text }}</a>
+</div>
+{% endblock %}

@@ -7,7 +7,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from sqlalchemy.orm import selectinload, joinedload
 
 from app.models import Users
-from app.models.services import Service, ServiceCategoryLink
+from app.models.services import Service, ServiceCategoryLink, ServiceStatus
 from app.schemas.user import UserRead
 
 
@@ -41,6 +41,7 @@ class ServiceRepository:
             category_id: Optional[uuid.UUID] = None,
             offset: int = 0,  # Added for performance
             limit: int = 100,  # Added to prevent memory crashes
+            sort_by: str = "newest",  # Added for frontend sorting sections
     ) -> List[Service]:
 
         q = select(Service).options(
@@ -55,6 +56,11 @@ class ServiceRepository:
             q = q.where(Service.user_id == user_id)
         if status:
             q = q.where(Service.status == status)
+
+        # Marketplace view: exclude drafts if not viewing own services
+        if not user_id:
+            q = q.where(Service.status != ServiceStatus.draft)
+
         if type:
             q = q.where(Service.type == type)
         if search:
@@ -62,6 +68,15 @@ class ServiceRepository:
             q = q.where(or_(Service.name.ilike(search_pattern), Service.description.ilike(search_pattern)))
         if category_id:
             q = q.join(ServiceCategoryLink).where(ServiceCategoryLink.category_id == category_id)
+
+        if sort_by == "trending":
+            q = q.order_by(Service.upvotes.desc())
+        elif sort_by == "affordable":
+            q = q.order_by(Service.price.asc())
+        elif sort_by == "newest":
+            q = q.order_by(Service.created_at.desc())
+        else:
+            q = q.order_by(Service.created_at.desc())
 
         q = q.offset(offset).limit(limit)
 
