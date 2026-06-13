@@ -56,16 +56,12 @@ async def update_user_wallet_balance_repo(
     except HTTPException:
         raise
     except Exception as e:
+
         raise HTTPException(status_code=500, detail=f"Error updating wallet: {str(e)}")
 
 
 async def update_user_wallet_balance_repo_ext(
     db: AsyncSession, credentials, amount: float, wallet_type: WalletType, allow_negative: bool = False
-)
-        raise HTTPException(status_code=500, detail=f"Error updating wallet: {str(e)}")
-
-async def update_user_wallet_balance_repo_ext(
-    db: AsyncSession, credentials, amount: float, wallet_type: WalletType
 ) -> WalletRead:
     if not credentials:
         raise HTTPException(status_code=400, detail="Missing user id")
