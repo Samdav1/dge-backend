@@ -13,7 +13,9 @@ from app.middlewares.auth_middleware import AuthMiddleware
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await init_db()
+    await manager.start()
     yield
+    await manager.stop()
 
 
 app = FastAPI(
