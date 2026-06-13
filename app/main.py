@@ -5,6 +5,9 @@ from app.db.session import init_db
 import app.models
 from app.api.v1 import router as api_router
 from app.core.api_key import get_api_key
+from app.dependencies.socket_connection import ConnectionManager, manager
+from app.middlewares.auth_middleware import AuthMiddleware
+
 
 
 @asynccontextmanager

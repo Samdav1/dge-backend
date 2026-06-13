@@ -73,7 +73,7 @@ def get_location_service(db: AsyncSession = Depends(get_session)) -> LocationSer
 def get_redis_location() -> RedisLocationService:
     """Return a RedisLocationService using the app-wide Redis connection."""
     # Import the singleton manager to reuse its Redis client
-    from app.core.socket_manager import manager
+    from app.dependencies.socket_connection import manager
     if manager._redis is None:
         raise HTTPException(status_code=503, detail="Redis not available")
     return RedisLocationService(manager._redis)
@@ -83,7 +83,7 @@ def get_matching_service(
     db: AsyncSession = Depends(get_session),
     redis_loc: RedisLocationService = Depends(get_redis_location),
 ) -> MatchingService:
-    from app.core.socket_manager import manager
+    from app.dependencies.socket_connection import manager
     return MatchingService(session=db, redis_location=redis_loc, connection_manager=manager)
 
 

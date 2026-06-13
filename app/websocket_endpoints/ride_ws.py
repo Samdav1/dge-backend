@@ -65,7 +65,7 @@ async def ride_websocket(
     Heartbeat: client may send the text "ping" to receive "pong" back.
     """
     # Import here to avoid circular imports (manager is a module-level singleton)
-    from app.core.socket_manager import manager
+    from app.dependencies.socket_connection import manager
 
     # ---- Authenticate ------------------------------------------------------
     if not token:

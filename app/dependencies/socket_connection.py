@@ -237,3 +237,5 @@ class ConnectionManager:
     # ---------- Utility helpers ----------
     async def list_local_users(self) -> Set[str]:
         return set(self.user_sockets.keys())
+
+manager = ConnectionManager(redis_url="redis://localhost:6379/0")

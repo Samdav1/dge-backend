@@ -13,7 +13,7 @@ from app.schemas.messages import MessageCreate, MessageRead
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 router = APIRouter(prefix="/chat", tags=["chat"])
-from app.core.socket_manager import manager
+from app.dependencies.socket_connection import manager
 
 from app.repositories.conversation_repo import get_user_conversations
 

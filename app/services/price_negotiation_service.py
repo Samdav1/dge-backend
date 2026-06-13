@@ -22,7 +22,7 @@ from app.services.notifications_service import NotificationService as InAppNotif
 from app.repositories.notifications_repo import NotificationRepository
 from app.schemas.notifications import NotificationCreate
 from app.models.notifications import NotificationType
-from app.websocket_endpoints.chat_ws import manager
+from app.dependencies.socket_connection import manager
 
 
 class PriceNegotiationService:
