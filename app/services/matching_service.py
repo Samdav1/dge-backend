@@ -68,11 +68,8 @@ class MatchingService:
         dropoff_address: Optional[str] = None,
         surge_multiplier: float = 1.0,
         radius_km: float = 5.0,
-<<<<<<< HEAD
         driver_id: Optional[uuid.UUID] = None,
         negotiated_fare: Optional[float] = None,
-=======
->>>>>>> save
     ) -> Trip:
         """
         Entry point called by POST /drivers/trips/request.

@@ -58,8 +58,14 @@ async def update_user_wallet_balance_repo(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error updating wallet: {str(e)}")
 
+
 async def update_user_wallet_balance_repo_ext(
     db: AsyncSession, credentials, amount: float, wallet_type: WalletType, allow_negative: bool = False
+)
+        raise HTTPException(status_code=500, detail=f"Error updating wallet: {str(e)}")
+
+async def update_user_wallet_balance_repo_ext(
+    db: AsyncSession, credentials, amount: float, wallet_type: WalletType
 ) -> WalletRead:
     if not credentials:
         raise HTTPException(status_code=400, detail="Missing user id")
@@ -96,3 +102,29 @@ async def update_user_wallet_balance_repo_ext(
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error updating wallet: {str(e)}")
+
+
+async def get_user_wallet_repo(db: AsyncSession, credentials) -> list[WalletRead]:
+    """
+
+    :p
+    :
+    :param credentials:
+    """
+
+    user_wallet = []
+
+    if not credentials:
+        raise HTTPException(status_code=404, detail="Missing user id")
+
+    try:
+        stmt = select(Wallet).where(Wallet.user_id == credentials)
+        result = await db.exec(stmt)
+        payload = result.all()
+
+        for w in payload:
+            wallet = WalletRead.model_validate(w)
+            user_wallet.append(wallet)
+        return user_wallet
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error getting user wallet: {str(e)}")

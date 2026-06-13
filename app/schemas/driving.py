@@ -73,6 +73,8 @@ class LocationPing(SQLModel):
     """
     latitude: float
     longitude: float
+    is_available: bool = True
+
 
 class LocationSearch(SQLModel):
     latitude: float
@@ -85,6 +87,7 @@ class DriverNearbyResponse(SQLModel):
     longitude: float
     distance_km: float
     car_name: str
+    driver_name: str = "Driver"
 
 
 # ---------------------------------------------------------------------------
@@ -100,12 +103,15 @@ class TripRequest(SQLModel):
     pickup_address: Optional[str] = None
     dropoff_address: Optional[str] = None
     surge_multiplier: float = 1.0
+    driver_id: Optional[uuid.UUID] = None
+    negotiated_fare: Optional[float] = None
 
 class TripRead(SQLModel):
     """Full trip state returned to both rider and driver."""
     id: uuid.UUID
     rider_id: uuid.UUID
     driver_id: Optional[uuid.UUID] = None
+    driver_user_id: Optional[uuid.UUID] = None
     pickup_lat: float
     pickup_lng: float
     dropoff_lat: float

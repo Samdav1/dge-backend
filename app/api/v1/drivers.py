@@ -73,7 +73,7 @@ def get_location_service(db: AsyncSession = Depends(get_session)) -> LocationSer
 def get_redis_location() -> RedisLocationService:
     """Return a RedisLocationService using the app-wide Redis connection."""
     # Import the singleton manager to reuse its Redis client
-    from app.main import manager
+    from app.core.socket_manager import manager
     if manager._redis is None:
         raise HTTPException(status_code=503, detail="Redis not available")
     return RedisLocationService(manager._redis)
@@ -83,7 +83,7 @@ def get_matching_service(
     db: AsyncSession = Depends(get_session),
     redis_loc: RedisLocationService = Depends(get_redis_location),
 ) -> MatchingService:
-    from app.main import manager
+    from app.core.socket_manager import manager
     return MatchingService(session=db, redis_location=redis_loc, connection_manager=manager)
 
 
@@ -162,10 +162,20 @@ async def ping_location(
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
 
+    driver_details = {
+        "name": getattr(current_user, 'username', 'Driver'),
+        "car_name": driver_profile.car_name,
+        "car_model": driver_profile.car_model,
+        "rank": driver_profile.rank.value,
+        "rating": 4.8  # Default mock rating for now
+    }
+
     await matching_service.handle_gps_ping(
         driver_id=driver_profile.id,
         lat=payload.latitude,
         lng=payload.longitude,
+        is_available=payload.is_available,
+        driver_details=driver_details
     )
     return {"status": "ok"}
 
@@ -181,22 +191,33 @@ async def get_drivers_nearby(
     radius: float = Query(5.0, description="Search radius in kilometres"),
     current_user: UserRead = Depends(get_current_user),
     redis_loc: RedisLocationService = Depends(get_redis_location),
+    driver_service: DriverService = Depends(get_driver_service),
+    db: AsyncSession = Depends(get_session),
 ):
     """
     Return available drivers within `radius` km, sorted nearest-first.
     Queries Redis GEO — O(log N), no SQL scan.
     """
+    from app.models.user import Users
     nearby = await redis_loc.find_nearby_available(latitude, longitude, radius_km=radius)
-    return [
-        DriverNearbyResponse(
-            driver_id=uuid.UUID(d["driver_id"]),
-            latitude=0.0,   # position intentionally hidden from public endpoint
-            longitude=0.0,
-            distance_km=d["distance_km"],
-            car_name="",    # enriched by client via separate /drivers/{id} call if needed
+    response = []
+    for d in nearby:
+        d_id = uuid.UUID(d["driver_id"])
+        profile = await driver_service.repo.get_by_id(d_id)
+        user_record = await db.get(Users, profile.user_id) if profile else None
+        driver_name = user_record.username if user_record else "Driver"
+        car_name = f"{profile.car_name} {profile.car_model}" if profile else ""
+        response.append(
+            DriverNearbyResponse(
+                driver_id=d_id,
+                latitude=d["lat"] if "lat" in d else 0.0,
+                longitude=d["lng"] if "lng" in d else 0.0,
+                distance_km=d["distance_km"],
+                car_name=car_name,
+                driver_name=driver_name,
+            )
         )
-        for d in nearby
-    ]
+    return response
 
 
 # ===========================================================================
@@ -271,10 +292,42 @@ async def request_ride(
             pickup_address=payload.pickup_address,
             dropoff_address=payload.dropoff_address,
             surge_multiplier=payload.surge_multiplier,
+            driver_id=payload.driver_id,
+            negotiated_fare=payload.negotiated_fare,
         )
         return trip
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Internal error: {str(e)}")
+
+
+@router.post(
+    "/trips/broadcast_intent",
+    status_code=status.HTTP_200_OK,
+    summary="Rider: Broadcast intent to book a ride to nearby drivers",
+)
+async def broadcast_intent(
+    payload: TripRequest,
+    current_user: UserRead = Depends(get_current_user),
+    matching: MatchingService = Depends(get_matching_service),
+):
+    """
+    Rider clicks 'See Available Drivers'.
+    This finds nearby available drivers and pushes an 'incoming_ride_intent'
+    WebSocket message to them to notify them that a rider is looking.
+    """
+    try:
+        result = await matching.broadcast_ride_intent(
+            rider_id=current_user.id,
+            pickup_lat=payload.pickup_lat,
+            pickup_lng=payload.pickup_lng,
+            dropoff_lat=payload.dropoff_lat,
+            dropoff_lng=payload.dropoff_lng,
+            pickup_address=payload.pickup_address,
+            dropoff_address=payload.dropoff_address,
+        )
+        return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Internal error: {str(e)}")
 
@@ -298,7 +351,88 @@ async def accept_trip(
     try:
         driver_profile = await driver_service.get_driver_profile(current_user.id)
         trip = await matching.accept_trip(driver_id=driver_profile.id, trip_id=trip_id)
-        return trip
+        trip_read = TripRead.model_validate(trip)
+        trip_read.driver_user_id = driver_profile.user_id
+        return trip_read
+    except PermissionError as e:
+        raise HTTPException(status_code=403, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Internal error: {str(e)}")
+
+
+@router.post(
+    "/trips/{trip_id}/arrive",
+    response_model=TripRead,
+    summary="Driver: Mark as arrived at pickup",
+)
+async def arrive_at_pickup(
+    trip_id: uuid.UUID,
+    current_user: UserRead = Depends(get_current_user),
+    driver_service: DriverService = Depends(get_driver_service),
+    matching: MatchingService = Depends(get_matching_service),
+):
+    try:
+        driver_profile = await driver_service.get_driver_profile(current_user.id)
+        trip = await matching.arrive_at_pickup(driver_id=driver_profile.id, trip_id=trip_id)
+        trip_read = TripRead.model_validate(trip)
+        trip_read.driver_user_id = driver_profile.user_id
+        return trip_read
+    except PermissionError as e:
+        raise HTTPException(status_code=403, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Internal error: {str(e)}")
+
+
+@router.post(
+    "/trips/{trip_id}/start",
+    response_model=TripRead,
+    summary="Driver: Request to start the trip",
+)
+async def start_trip(
+    trip_id: uuid.UUID,
+    current_user: UserRead = Depends(get_current_user),
+    driver_service: DriverService = Depends(get_driver_service),
+    matching: MatchingService = Depends(get_matching_service),
+):
+    try:
+        driver_profile = await driver_service.get_driver_profile(current_user.id)
+        trip = await matching.start_trip(driver_id=driver_profile.id, trip_id=trip_id)
+        trip_read = TripRead.model_validate(trip)
+        trip_read.driver_user_id = driver_profile.user_id
+        return trip_read
+    except PermissionError as e:
+        raise HTTPException(status_code=403, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Internal error: {str(e)}")
+
+
+@router.post(
+    "/trips/{trip_id}/confirm_start",
+    response_model=TripRead,
+    summary="Rider: Confirm start of the trip",
+)
+async def confirm_start(
+    trip_id: uuid.UUID,
+    current_user: UserRead = Depends(get_current_user),
+    matching: MatchingService = Depends(get_matching_service),
+    driver_service: DriverService = Depends(get_driver_service),
+):
+    try:
+        trip = await matching.confirm_start(rider_id=current_user.id, trip_id=trip_id)
+        trip_read = TripRead.model_validate(trip)
+        if trip.driver_id:
+            try:
+                driver_profile = await driver_service.get_driver_profile_by_id(trip.driver_id)
+                trip_read.driver_user_id = driver_profile.user_id
+            except Exception:
+                pass
+        return trip_read
     except PermissionError as e:
         raise HTTPException(status_code=403, detail=str(e))
     except ValueError as e:
@@ -374,6 +508,54 @@ async def complete_trip(
 
 
 @router.get(
+    "/trips/active",
+    response_model=Optional[TripRead],
+    summary="Get active trip for current user",
+)
+async def get_active_trip(
+    current_user: UserRead = Depends(get_current_user),
+    driver_service: DriverService = Depends(get_driver_service),
+    repo: TripRepository = Depends(get_trip_repo),
+):
+    """
+    Returns the user's current active or pending trip (either as rider or driver).
+    If no active trip exists, returns None.
+    """
+    # Check if they have an active trip as a rider
+    rider_trip = await repo.get_active_for_rider(current_user.id)
+    if rider_trip:
+        rider_trip_read = TripRead.model_validate(rider_trip)
+        if rider_trip.driver_id:
+            try:
+                profile = await driver_service.get_driver_profile_by_id(rider_trip.driver_id)
+                rider_trip_read.driver_user_id = profile.user_id
+            except Exception:
+                pass
+        return rider_trip_read
+
+    # Check if they have an active trip as a driver
+    try:
+        driver_profile = await driver_service.get_driver_profile(current_user.id)
+        if driver_profile:
+            driver_trip = await repo.get_active_for_driver(driver_profile.id)
+            if driver_trip:
+                driver_trip_read = TripRead.model_validate(driver_trip)
+                driver_trip_read.driver_user_id = driver_profile.user_id
+                return driver_trip_read
+
+            # Optionally check pending trips for driver too
+            pending_trip = await repo.get_pending_for_driver(driver_profile.id)
+            if pending_trip:
+                pending_trip_read = TripRead.model_validate(pending_trip)
+                pending_trip_read.driver_user_id = driver_profile.user_id
+                return pending_trip_read
+    except ValueError:
+        pass
+
+    return None
+
+
+@router.get(
     "/trips/my/rider",
     response_model=List[TripRead],
     summary="Rider: My trip history",
@@ -423,4 +605,4 @@ async def get_trip(
     # Only rider or the assigned driver can view the trip
     if trip.rider_id != current_user.id and trip.driver_id != current_user.id:
         raise HTTPException(status_code=403, detail="You are not a party to this trip")
-
+    return trip
