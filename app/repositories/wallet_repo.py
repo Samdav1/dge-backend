@@ -56,4 +56,73 @@ async def update_user_wallet_balance_repo(
     except HTTPException:
         raise
     except Exception as e:
+<<<<<<< Updated upstream
         raise HTTPException(status_code=500, detail=f"Error updating wallet: {str(e)}")
+=======
+        raise HTTPException(status_code=500, detail=f"Error updating wallet: {str(e)}")
+
+async def update_user_wallet_balance_repo_ext(
+    db: AsyncSession, credentials, amount: float, wallet_type: WalletType, allow_negative: bool = False
+) -> WalletRead:
+    if not credentials:
+        raise HTTPException(status_code=400, detail="Missing user id")
+
+    statement = select(Wallet).where(
+        Wallet.user_id == credentials, Wallet.wallet_type == wallet_type
+    )
+    result = await db.exec(statement)
+    wallet = result.first()
+
+    if not wallet:
+        # Auto-create the missing wallet
+        wallet = Wallet(
+            user_id=credentials,
+            wallet_type=wallet_type,
+            balance_cents=0,
+            currency="NGN"
+        )
+        db.add(wallet)
+        await db.flush()
+
+    try:
+        if not allow_negative and amount < 0 and wallet.balance_cents + amount < 0:
+            raise HTTPException(
+                status_code=400,
+                detail="Insufficient funds: cannot complete transaction"
+            )
+
+        wallet.balance_cents += int(amount)
+        db.add(wallet)
+
+        return WalletRead.model_validate(wallet)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error updating wallet: {str(e)}")
+
+
+async def get_user_wallet_repo(db: AsyncSession, credentials) -> list[WalletRead]:
+    """
+
+    :p
+    :
+    :param credentials:
+    """
+
+    user_wallet = []
+
+    if not credentials:
+        raise HTTPException(status_code=404, detail="Missing user id")
+
+    try:
+        stmt = select(Wallet).where(Wallet.user_id == credentials)
+        result = await db.exec(stmt)
+        payload = result.all()
+
+        for w in payload:
+            wallet = WalletRead.model_validate(w)
+            user_wallet.append(wallet)
+        return user_wallet
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error getting user wallet: {str(e)}")
+>>>>>>> Stashed changes

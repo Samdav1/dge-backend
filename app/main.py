@@ -5,6 +5,11 @@ from app.db.session import init_db
 import app.models
 from app.api.v1 import router as api_router
 from app.core.api_key import get_api_key
+<<<<<<< Updated upstream
+=======
+from app.core.socket_manager import manager
+from app.middlewares.auth_middleware import AuthMiddleware
+>>>>>>> Stashed changes
 
 
 @asynccontextmanager
