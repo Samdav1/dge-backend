@@ -23,10 +23,10 @@ class NotificationService:
         try:
             # Inject common context
             context['subject'] = subject
-            
+
             template = self.env.get_template(template_name)
             html_output = template.render(context)
-            
+
             service = EmailService()
             dispatch_task(
                 send_email_task,
@@ -83,7 +83,7 @@ class NotificationService:
 
     def send_withdrawal_status_mail(self, user: Users, status: str, amount_cents: int, bank_name: str, account_number: str, reference: str = None, rejection_reason: str = None):
         amount_str = f"₦{amount_cents / 100:,.2f}"
-        
+
         if status == "pending":
             subject = "Withdrawal Request Received ⏳"
             context = {
@@ -150,7 +150,7 @@ class NotificationService:
     def send_price_negotiation_offer(self, receiver: Users, initiator: Users, negotiation: PriceNegotiation):
         subject = f"An Opportunity Awaits!🌟 You've Received a New Offer from {initiator.username}"
         amount_formatted = f"₦{negotiation.proposed_price_cents / 100:,.2f}"
-        
+
         # We don't have the service title directly here, we could add it or just use "Project"
         context = {
             'name': receiver.username,
@@ -191,7 +191,7 @@ class NotificationService:
 
     def send_escrow_creation_mail(self, payer: Users, payee: Users, escrow: Escrow):
         subject = "Escrow Creation"
-        
+
         # Send to Payee
         payee_context = {
             'event_title': "Escrow Creation",
@@ -202,7 +202,7 @@ class NotificationService:
             'cta_link': "https://your-frontend.com/dashboard/escrows"
         }
         self._render_and_dispatch('escrow_event.html', [payee.email], subject, payee_context)
-        
+
         # Send to Payer
         payer_context = {
             'event_title': "Escrow Creation",
@@ -230,7 +230,7 @@ class NotificationService:
 
     def send_escrow_dispute_mail(self, payer: Users, payee: Users, escrow: Escrow):
         subject = f"Action Required: A Dispute Has Been Opened (Escrow ID {escrow.id})"
-        
+
         # Payer
         self._render_and_dispatch('escrow_event.html', [payer.email], subject, {
             'event_title': "We're Here to Help",
@@ -280,7 +280,7 @@ class NotificationService:
 
     def send_ride_cancelled_mail(self, rider: Users, driver: Users, cancelled_by: Users):
         subject = "Ride Request Cancelled"
-        
+
         # Rider email
         rider_context = {
             'name': rider.username,

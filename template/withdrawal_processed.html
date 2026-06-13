@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h2>Update on Your Withdrawal Request</h2>
+
+<p>Hi {{ name }},</p>
+
+{% if status == 'completed' or status == 'approved' or status == 'processing' %}
+<p>Great news! Your withdrawal request has been <strong>approved</strong> and the funds are on their way to your bank account. Depending on your bank, it may take a short while to reflect in your balance.</p>
+
+<table class="details-table">
+    <tr>
+        <th>Amount Transferred</th>
+        <td style="color: #10b981;">{{ amount }}</td>
+    </tr>
+    <tr>
+        <th>Destination Bank</th>
+        <td>{{ bank_name }}</td>
+    </tr>
+    <tr>
+        <th>Account Number</th>
+        <td>{{ account_number }}</td>
+    </tr>
+    <tr>
+        <th>Reference ID</th>
+        <td>{{ reference }}</td>
+    </tr>
+</table>
+
+{% else %}
+<p>We're sorry, but your withdrawal request has been <strong>rejected</strong> by our administrative team. The requested funds have been returned to your DGE World wallet.</p>
+
+<table class="details-table">
+    <tr>
+        <th>Amount</th>
+        <td>{{ amount }}</td>
+    </tr>
+    <tr>
+        <th>Reason for Rejection</th>
+        <td style="color: #ef4444;">{{ rejection_reason | default('Administrative review failure') }}</td>
+    </tr>
+</table>
+
+<p>Please contact support if you need further clarification.</p>
+{% endif %}
+
+<div class="cta-container">
+    <a href="{{ cta_link }}" class="cta-button">View Transaction History</a>
+</div>
+{% endblock %}

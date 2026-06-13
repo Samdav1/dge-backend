@@ -32,6 +32,7 @@ class KYCBase(BaseModel):
     postal_code: Optional[str] = None
     id_document_type: Optional[DocumentType] = None
     id_document_s3_key: Optional[str] = None
+    id_document_value: Optional[str] = None
     address_document_type: Optional[DocumentType] = None
     address_document_s3_key: Optional[str] = None
     rejection_reason: Optional[str] = None
@@ -57,6 +58,7 @@ class KYCUpdate(BaseModel):
     postal_code: Optional[str] = None
     id_document_type: Optional[DocumentType] = None
     id_document_s3_key: Optional[str] = None
+    id_document_value: Optional[str] = None
     address_document_type: Optional[DocumentType] = None
     address_document_s3_key: Optional[str] = None
     rejection_reason: Optional[str] = None

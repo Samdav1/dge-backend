@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h2>Deposit Successful ✅</h2>
+
+<p>Hi {{ name }},</p>
+
+<p>Your wallet has been successfully funded. The funds are now available for you to use on DGE World.</p>
+
+<table class="details-table">
+    <tr>
+        <th>Amount Deposited</th>
+        <td style="color: #10b981;">+{{ amount }}</td>
+    </tr>
+    <tr>
+        <th>Reference ID</th>
+        <td>{{ reference }}</td>
+    </tr>
+    <tr>
+        <th>Date & Time</th>
+        <td>{{ date }}</td>
+    </tr>
+</table>
+
+<div class="cta-container">
+    <a href="{{ cta_link }}" class="cta-button">View My Wallet</a>
+</div>
+{% endblock %}

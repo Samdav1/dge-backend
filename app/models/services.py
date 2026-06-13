@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime, timezone
 from typing import Optional, List
-from sqlalchemy import Column, String, UUID, TIMESTAMP, ForeignKey, Integer
+from sqlalchemy import Column, String, UUID, TIMESTAMP, ForeignKey, Integer, Float
 from sqlmodel import SQLModel, Field, Relationship, Text
 import enum
 from sqlalchemy import Enum as SAEnum
@@ -48,6 +48,7 @@ class ServiceCategory(SQLModel, table=True):
         back_populates="categories",
         link_model=ServiceCategoryLink
     )
+    posted_jobs: List["PostedJob"] = Relationship(back_populates="category")
 
 
 class Service(SQLModel, table=True):
@@ -70,6 +71,9 @@ class Service(SQLModel, table=True):
     user_online: bool = Field(default=False)
     user_picture: Optional[str] = Field(default=None)
     status: ServiceStatus = Field(sa_column=Column(SAEnum(ServiceStatus, name="service_status_enum"), default="draft", nullable=False))
+    price: float = Field(sa_column=Column(Float, default=0.00, nullable=True))
+    discount: Optional[bool] = Field(default=False)
+    discount_percent: Optional[float] = Field(default=0.00)
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),
         sa_column=Column(TIMESTAMP(timezone=True), nullable=False),

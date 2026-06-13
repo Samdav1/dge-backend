@@ -68,8 +68,11 @@ class MatchingService:
         dropoff_address: Optional[str] = None,
         surge_multiplier: float = 1.0,
         radius_km: float = 5.0,
+<<<<<<< HEAD
         driver_id: Optional[uuid.UUID] = None,
         negotiated_fare: Optional[float] = None,
+=======
+>>>>>>> save
     ) -> Trip:
         """
         Entry point called by POST /drivers/trips/request.
@@ -90,18 +93,18 @@ class MatchingService:
         if driver_id:
             # Direct negotiation request
             driver_uuid = driver_id
-            
+
             # 1. Check if driver is already busy
             active_trip = await self.trip_repo.get_active_for_driver(driver_uuid)
             if active_trip:
                 raise ValueError("This driver is currently on another ride. Please choose a different driver.")
-                
+
             pending_trip = await self.trip_repo.get_pending_for_driver(driver_uuid)
             if pending_trip:
                 raise ValueError("This driver is currently considering another ride request. Please try again later.")
 
             distance_to_driver_km = 0.0 # Could fetch from Redis to be accurate
-            
+
             # 2. Verify driver is available in Redis
             avail_raw = await self.redis_loc._r.get(f"driver:avail:{str(driver_uuid)}")
             is_avail = avail_raw and (avail_raw.decode() if isinstance(avail_raw, bytes) else str(avail_raw)) == "1"
@@ -202,7 +205,7 @@ class MatchingService:
             lng=pickup_lng,
             radius_km=radius_km,
         )
-        
+
         if not nearby:
             return {"notified": 0}
 
@@ -217,7 +220,7 @@ class MatchingService:
         for driver in nearby:
             driver_uuid = uuid.UUID(driver["driver_id"])
             distance_to_driver_km = driver["distance_km"]
-            
+
             driver_profile = await self.driver_repo.get_by_id(driver_uuid)
             if not driver_profile:
                 continue
@@ -241,7 +244,7 @@ class MatchingService:
             }
             await self.manager.send_to_user(str(driver_profile.user_id), payload)
             notified_count += 1
-            
+
         # Also broadcast globally for drivers who selected "Country-Wide"
         global_payload = {
             "type": "incoming_ride_intent",
@@ -262,7 +265,7 @@ class MatchingService:
             "is_global": True,
         }
         await self.manager.broadcast_conversation("driving_requests_global", global_payload)
-            
+
         return {"notified": notified_count}
 
     async def accept_trip(self, driver_id: uuid.UUID, trip_id: uuid.UUID) -> Trip:
@@ -408,20 +411,20 @@ class MatchingService:
         try:
             from app.services.email_notification_service import NotificationService
             from app.repositories.user_repo import get_user_by_id
-            
+
             rider_user = await get_user_by_id(db=self.session, user_id=trip.rider_id)
             driver_user = None
             if trip.driver_id:
                 driver_profile = await DriverRepository(self.session).get_by_id(trip.driver_id)
                 if driver_profile:
                     driver_user = await get_user_by_id(db=self.session, user_id=driver_profile.user_id)
-            
+
             cancelled_by_user = rider_user if cancelled_by_id == trip.rider_id else driver_user
-            
+
             if rider_user and cancelled_by_user:
                 NotificationService().send_ride_cancelled_mail(
-                    rider=rider_user, 
-                    driver=driver_user, 
+                    rider=rider_user,
+                    driver=driver_user,
                     cancelled_by=cancelled_by_user
                 )
         except Exception as e:
@@ -448,7 +451,7 @@ class MatchingService:
         trip.status = TripStatus.COMPLETED
         trip.completed_at = datetime.now(timezone.utc)
         trip.final_fare = final_fare if final_fare is not None else trip.estimated_fare
-        
+
         # 1. Process Wallet Deductions & Credits
         from app.repositories.wallet_repo import update_user_wallet_balance_repo_ext
         from app.models.wallet import WalletType
@@ -456,38 +459,38 @@ class MatchingService:
         from app.repositories.transactions_repo import TransactionRepository
         from app.schemas.transactions import TransactionCreate
         from app.models.transactions import TxnType, TxnStatus
-        
+
         # Deduct from rider (using deposit wallet)
         # Note: This will raise HTTPException(400) if balance < 0
         fare_cents = int(trip.final_fare * 100)
         try:
             rider_wallet = await update_user_wallet_balance_repo_ext(
-                db=self.session, 
-                credentials=trip.rider_id, 
-                amount=-fare_cents, 
+                db=self.session,
+                credentials=trip.rider_id,
+                amount=-fare_cents,
                 wallet_type=WalletType.deposit,
                 allow_negative=True
             )
-            
+
             # 2. Calculate platform fee
-            # Use the fee_service. Let's use event_type="payment" or "escrow_release" as a proxy, 
+            # Use the fee_service. Let's use event_type="payment" or "escrow_release" as a proxy,
             # or just calculate manually if we want a default 10% fee. We'll use 10% for now.
             fee_cents = int(fare_cents * 0.10)
             net_cents = fare_cents - fee_cents
-            
+
             # 3. Credit driver (using earnings wallet)
             from app.repositories.driving import DriverRepository
             driver_user_id = (await DriverRepository(self.session).get_by_id(trip.driver_id)).user_id
             driver_wallet = await update_user_wallet_balance_repo_ext(
-                db=self.session, 
-                credentials=driver_user_id, 
-                amount=net_cents, 
+                db=self.session,
+                credentials=driver_user_id,
+                amount=net_cents,
                 wallet_type=WalletType.earnings
             )
-            
+
             # 4. Create Transaction Records
             txn_repo = TransactionRepository(self.session)
-            
+
             # Rider Debit
             await txn_repo.create_transaction_ext(TransactionCreate(
                 wallet_id=rider_wallet.id,
@@ -497,7 +500,7 @@ class MatchingService:
                 status=TxnStatus.completed,
                 reference=f"trip_pay_{trip.id}"
             ))
-            
+
             # Driver Credit
             await txn_repo.create_transaction_ext(TransactionCreate(
                 wallet_id=driver_wallet.id,
@@ -507,7 +510,7 @@ class MatchingService:
                 status=TxnStatus.completed,
                 reference=f"trip_earn_{trip.id}"
             ))
-            
+
         except Exception as e:
             logger.error(f"Trip {trip.id} payment failed: {e}")
             raise ValueError(f"Payment failed: {e}")
@@ -533,15 +536,15 @@ class MatchingService:
             from app.services.email_notification_service import NotificationService
             from app.repositories.user_repo import get_user_by_id
             from app.repositories.driving import DriverRepository
-            
+
             driver_user_id = (await DriverRepository(self.session).get_by_id(trip.driver_id)).user_id
             rider_user = await get_user_by_id(db=self.session, user_id=trip.rider_id)
             driver_user = await get_user_by_id(db=self.session, user_id=driver_user_id)
-            
+
             if rider_user and driver_user:
                 NotificationService().send_ride_completed_mail(
-                    rider=rider_user, 
-                    driver=driver_user, 
+                    rider=rider_user,
+                    driver=driver_user,
                     trip=trip
                 )
         except Exception as e:
@@ -576,7 +579,7 @@ class MatchingService:
             }
             if driver_details:
                 payload["details"] = driver_details
-                
+
             await self.manager.broadcast_conversation("driving_global", payload)
 
         # Check for an active trip to forward location to rider
@@ -637,7 +640,7 @@ class MatchingService:
         try:
             from app.services.email_notification_service import NotificationService as EmailService
             from app.repositories.user_repo import get_user_by_id
-            
+
             driver_user = await get_user_by_id(driver_profile.user_id, self.session)
             if driver_user:
                 # Reuse the service_purchase template as a temporary fix for a ride request email
@@ -645,9 +648,9 @@ class MatchingService:
                 rider_user = await get_user_by_id(trip.rider_id, self.session)
                 if rider_user:
                     email_svc._render_and_dispatch(
-                        'service_purchase.html', 
-                        [str(driver_user.email)], 
-                        "New Ride Request! 🚗", 
+                        'service_purchase.html',
+                        [str(driver_user.email)],
+                        "New Ride Request! 🚗",
                         {
                             'is_buyer': False,
                             'name': driver_user.username,

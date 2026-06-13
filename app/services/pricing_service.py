@@ -19,9 +19,15 @@ from dataclasses import dataclass
 # ---------------------------------------------------------------------------
 # Rate constants  (can be overridden at call site or via dependency injection)
 # ---------------------------------------------------------------------------
+<<<<<<< HEAD
 BASE_FARE: float = 500.0      # NGN — flat flag-fall
 RATE_PER_KM: float = 300.0    # NGN per kilometre
 MIN_FARE: float = 1000.0      # NGN — minimum charge per trip
+=======
+BASE_FARE: float = 1.50      # USD — flat flag-fall
+RATE_PER_KM: float = 0.35    # USD per kilometre
+MIN_FARE: float = 2.50       # USD — minimum charge per trip
+>>>>>>> save
 
 
 # ---------------------------------------------------------------------------

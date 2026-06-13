@@ -2,7 +2,7 @@ from app.models import Wallet
 from app.schemas.wallet import WalletCreate, WalletRead, WalletType
 from sqlmodel.ext.asyncio.session import AsyncSession
 from fastapi import HTTPException, Depends
-from app.repositories.wallet_repo import create_user_wallet_repo, update_user_wallet_balance_repo
+from app.repositories.wallet_repo import create_user_wallet_repo, update_user_wallet_balance_repo, get_user_wallet_repo
 
 
 async def create_user_wallet_service(db: AsyncSession, user_id) -> WalletRead:
@@ -22,3 +22,15 @@ async def update_user_wallet_service(db: AsyncSession, user_id, amount: float, w
         return WalletRead.model_validate(wallet)
     except Exception as e:
         raise HTTPException(detail=str(e), status_code=500)
+
+async def get_user_wallet_service(db: AsyncSession, credentials) -> list[WalletRead]:
+    """
+
+    :param db:
+    :param credentials:
+    """
+    if not credentials:
+        raise HTTPException(detail="Missing credentials", status_code=404)
+
+    user_wallet = await get_user_wallet_repo(db, credentials)
+    return user_wallet

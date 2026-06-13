@@ -46,17 +46,6 @@ class DriverService:
             raise ValueError("Driver profile not found")
         return profile
 
-    async def get_driver_profile_by_id(self, driver_id: uuid.UUID) -> DriverProfile:
-        """
-
-        :param driver_id:
-        :return:
-        """
-        profile = await self.repo.get_by_id(driver_id)
-        if not profile:
-            raise ValueError("Driver profile not found")
-        return profile
-
 
     async def update_driver_profile(self, user: UserRead, payload: DriverUpdate) -> DriverProfile:
         """

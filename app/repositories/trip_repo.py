@@ -41,11 +41,7 @@ class TripRepository:
         stmt = (
             select(Trip)
             .where(Trip.rider_id == rider_id)
-            .where(Trip.status.in_([
-                TripStatus.PENDING, TripStatus.ACTIVE, 
-                TripStatus.EN_ROUTE, TripStatus.ARRIVED, 
-                TripStatus.AWAITING_CONFIRMATION, TripStatus.IN_PROGRESS
-            ]))
+            .where(Trip.status.in_([TripStatus.PENDING, TripStatus.ACTIVE]))
             .order_by(Trip.requested_at.desc())
         )
         result = await self.session.exec(stmt)
@@ -56,11 +52,7 @@ class TripRepository:
         stmt = (
             select(Trip)
             .where(Trip.driver_id == driver_id)
-            .where(Trip.status.in_([
-                TripStatus.ACTIVE, TripStatus.EN_ROUTE, 
-                TripStatus.ARRIVED, TripStatus.AWAITING_CONFIRMATION, 
-                TripStatus.IN_PROGRESS
-            ]))
+            .where(Trip.status == TripStatus.ACTIVE)
         )
         result = await self.session.exec(stmt)
         return result.first()

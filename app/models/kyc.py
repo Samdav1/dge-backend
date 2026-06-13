@@ -39,6 +39,7 @@ class KYC(SQLModel, table=True):
     postal_code: Optional[str] = Field(default=None)
     id_document_type: Optional[DocumentType] = Field(default=None)
     id_document_s3_key: Optional[str] = Field(default=None)
+    id_document_value: Optional[str] = Field(default=None)
     address_document_type: Optional[DocumentType] = Field(default=None)
     address_document_s3_key: Optional[str] = Field(default=None)
     rejection_reason: Optional[str] = Field(default=None)

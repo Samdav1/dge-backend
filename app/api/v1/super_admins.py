@@ -1,0 +1,2001 @@
+# app/api/v1/superadmin.py
+from fastapi import APIRouter, Depends, UploadFile, Form, status, Response, HTTPException, Request
+from sqlmodel.ext.asyncio.session import AsyncSession
+from typing import Optional, List
+import uuid
+from datetime import datetime, timezone
+
+from watchfiles.run import get_tty_path
+
+from app.core.security import get_access_token, get_refresh_token
+from app.dependencies.admin_auth import get_current_admin
+from app.services.super_admin_service import SuperAdminService
+from app.models.admin import AdminRank
+from app.schemas.super_admin import SuperAdminRead, AdminLogin, SuperAdminLoginRead
+from app.db.session import get_session
+from fastapi.security import OAuth2PasswordRequestForm
+
+router = APIRouter(prefix="")
+service = SuperAdminService()
+
+
+@router.post("/",  status_code=status.HTTP_201_CREATED)
+async def create_superadmin(
+        response: Response,
+        name: str = Form(...),
+        email: str = Form(...),
+        password: str = Form(...),
+        phone_number: Optional[str] = Form(None),
+        rank: AdminRank = Form(AdminRank.Major),
+        avatar: Optional[UploadFile] = None,
+        session: AsyncSession = Depends(get_session),
+):
+    """Create a new SuperAdmin (multipart form with image upload)."""
+    new_admin = await service.create_superadmin(session, name, email, password, phone_number, rank, avatar)
+    access_token = await get_access_token(str(new_admin.id))
+    refresh_token = await get_refresh_token(str(new_admin.id))
+    admin_refined = SuperAdminLoginRead.model_validate(new_admin)
+
+    response.set_cookie(
+        key="refresh_token",
+        value=refresh_token,
+        httponly=True,
+        samesite="Lax",
+        secure=True,
+        max_age=7 * 24 * 60 * 60,
+    )
+
+    return {"admin": admin_refined, "access_token": access_token}
+
+
+@router.get("/", response_model=List[SuperAdminRead])
+async def list_superadmins(session: AsyncSession = Depends(get_session)):
+    return await service.list_superadmins(session)
+
+
+@router.get("/stats")
+async def get_stats(session: AsyncSession = Depends(get_session)):
+    from sqlmodel import select, func
+    from app.models.user import Users
+    from app.models.services import Service
+    from app.models.driving import DriverProfile
+    from app.models.transactions import Transaction
+
+    user_count_res = await session.execute(select(func.count()).select_from(Users))
+    user_count = user_count_res.scalar() or 0
+
+    services_count_res = await session.execute(select(func.count()).select_from(Service))
+    services_count = services_count_res.scalar() or 0
+
+    drivers_count_res = await session.execute(select(func.count()).select_from(DriverProfile))
+    drivers_count = drivers_count_res.scalar() or 0
+
+    tx_revenue_res = await session.execute(select(func.sum(Transaction.amount_cents)).select_from(Transaction))
+    tx_revenue = tx_revenue_res.scalar() or 0
+
+    # Get recent users
+    recent_users_res = await session.execute(select(Users).order_by(Users.created_at.desc()).limit(10))
+    recent_users = recent_users_res.scalars().all()
+
+    # Get recent services
+    from sqlalchemy.orm import selectinload
+    recent_services_res = await session.execute(
+        select(Service).options(selectinload(Service.user)).order_by(Service.created_at.desc()).limit(10)
+    )
+    recent_services = recent_services_res.scalars().all()
+
+    return {
+        "total_users": user_count,
+        "total_services": services_count,
+        "active_drivers": drivers_count,
+        "total_revenue": float(tx_revenue) / 100.0,
+        "recent_users": [
+            {
+                "name": u.username,
+                "email": u.email,
+                "id": str(u.id)[:12].upper(),
+                "full_id": str(u.id),
+                "joined": u.created_at.strftime("%d/%m/%Y") if u.created_at else "",
+                "status": u.status.value.upper() if hasattr(u.status, "value") else str(u.status).upper()
+            }
+            for u in recent_users
+        ],
+        "recent_services": [
+            {
+                "id": str(s.id),
+                "user": u.username if (u := getattr(s, "user", None)) else "Anonymous",
+                "title": s.name,
+                "type": s.type.value if hasattr(s.type, "value") else str(s.type),
+                "listed": s.created_at.strftime("%d/%m/%Y") if s.created_at else "",
+                "status": s.status.value.upper() if hasattr(s.status, "value") else str(s.status).upper()
+            }
+            for s in recent_services
+        ]
+    }
+
+
+@router.get("/{admin_id:uuid}", response_model=SuperAdminRead)
+async def get_superadmin(admin_id: uuid.UUID, session: AsyncSession = Depends(get_session)):
+    return await service.get_superadmin(session, admin_id)
+
+
+@router.put("/{admin_id:uuid}", response_model=SuperAdminRead)
+async def update_superadmin(
+    admin_id: uuid.UUID,
+    req: Request,
+    session: AsyncSession = Depends(get_session)
+):
+    from app.models.admin import SuperAdmin
+    from sqlmodel import select
+    try:
+        body = await req.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid JSON body")
+
+    stmt = select(SuperAdmin).where(SuperAdmin.id == admin_id)
+    res = await session.execute(stmt)
+    admin = res.scalar_one_or_none()
+    if not admin:
+        raise HTTPException(status_code=404, detail="Admin not found")
+
+    if "name" in body:
+        admin.name = body["name"]
+    if "phone" in body:
+        admin.phone_number = body["phone"]
+    if "phone_number" in body:
+        admin.phone_number = body["phone_number"]
+    if "email" in body:
+        admin.email = body["email"]
+    if "rank" in body:
+        admin.rank = body["rank"]
+    if "status" in body:
+        status_val = body["status"].strip().capitalize()
+        if status_val == "Active":
+            status_val = "Approved"
+        elif status_val == "Pending":
+            status_val = "Pending"
+        elif status_val == "Suspended":
+            status_val = "Suspended"
+        elif status_val == "Rejected":
+            status_val = "Rejected"
+        else:
+            status_val = "Approved"
+        admin.status = status_val
+
+    await session.commit()
+    await session.refresh(admin)
+    return admin
+
+
+@router.delete("/{admin_id:uuid}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_superadmin(admin_id: uuid.UUID, session: AsyncSession = Depends(get_session)):
+    await service.delete_superadmin(session, admin_id)
+    return None
+
+
+
+@router.post("/login")
+async def login(
+        request: Request,
+        response: Response,
+        db: AsyncSession = Depends(get_session),
+        form_data: OAuth2PasswordRequestForm = Depends()):
+    from app.models.admin import AdminSession
+    
+    admin_info = AdminLogin.model_validate({"username": form_data.username, "password": form_data.password})
+    admin_details = await service.admin_login(db, admin_info)
+
+    access_token = await get_access_token(str(admin_details.id))
+    refresh_token = await get_refresh_token(str(admin_details.id))
+    admin_refined = SuperAdminLoginRead.model_validate(admin_details)
+
+    response.set_cookie(
+        key="refresh_token",
+        value=refresh_token,
+        httponly=True,
+        samesite="Lax",
+        secure=True,
+        max_age=7 * 24 * 60 * 60,
+    )
+    
+    # Log the session
+    ip_address = request.client.host if request.client else "Unknown"
+    user_agent = request.headers.get("user-agent", "Unknown Device")
+    
+    # Use a simple heuristic for device
+    device_str = user_agent
+    if "Windows" in user_agent: device_str = "Windows"
+    elif "Mac OS X" in user_agent or "Macintosh" in user_agent: device_str = "MacOS"
+    elif "Linux" in user_agent: device_str = "Linux"
+    elif "Android" in user_agent: device_str = "Android"
+    elif "iPhone" in user_agent or "iPad" in user_agent: device_str = "iOS"
+    else: device_str = "Unknown Device"
+
+    new_session = AdminSession(
+        admin_id=admin_details.id,
+        device=device_str,
+        location="Unknown",
+        ip_address=ip_address
+    )
+    db.add(new_session)
+    await db.commit()
+
+    return {"admin": admin_refined, "access_token": access_token}
+
+
+@router.get("/sessions")
+async def get_sessions(
+    admin: SuperAdminRead = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_session)
+):
+    from sqlmodel import select
+    from app.models.admin import AdminSession
+    stmt = select(AdminSession).where(AdminSession.admin_id == admin.id).order_by(AdminSession.last_activity.desc())
+    res = await db.execute(stmt)
+    sessions = res.scalars().all()
+    return sessions
+
+@router.get("/preferences")
+async def get_preferences(admin: SuperAdminRead = Depends(get_current_admin)):
+    return {
+        "emailNotifs": admin.email_notifs,
+        "pushNotifs": admin.push_notifs,
+        "securityAlerts": admin.security_alerts
+    }
+
+from pydantic import BaseModel
+
+class PreferencesUpdate(BaseModel):
+    emailNotifs: bool
+    pushNotifs: bool
+    securityAlerts: bool
+
+@router.put("/preferences")
+async def update_preferences(
+    prefs: PreferencesUpdate,
+    admin: SuperAdminRead = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_session)
+):
+    from sqlmodel import select
+    from app.models.admin import SuperAdmin
+    
+    stmt = select(SuperAdmin).where(SuperAdmin.id == admin.id)
+    res = await db.execute(stmt)
+    db_admin = res.scalar_one_or_none()
+    
+    if db_admin:
+        db_admin.email_notifs = prefs.emailNotifs
+        db_admin.push_notifs = prefs.pushNotifs
+        db_admin.security_alerts = prefs.securityAlerts
+        await db.commit()
+        await db.refresh(db_admin)
+        return {"status": "success"}
+    
+    raise HTTPException(status_code=404, detail="Admin not found")
+
+
+@router.post("/services/status")
+async def change_service_status(
+    request: Request,
+    service_id: Optional[str] = Form(None),
+    status: Optional[str] = Form(None),
+    db: AsyncSession = Depends(get_session)
+):
+    from app.models.services import Service, ServiceStatus
+    from sqlmodel import select
+
+    if not service_id or not status:
+        try:
+            body = await request.json()
+            service_id = service_id or body.get("service_id") or body.get("serviceId")
+            status = status or body.get("status")
+        except Exception:
+            pass
+
+    if not service_id or not status:
+        raise HTTPException(status_code=400, detail="Missing service_id or status")
+
+    try:
+        service_uuid = uuid.UUID(service_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid service_id format")
+
+    stmt = select(Service).where(Service.id == service_uuid)
+    res = await db.execute(stmt)
+    s = res.scalar_one_or_none()
+    if not s:
+        raise HTTPException(status_code=404, detail="Service not found")
+
+    if status.upper() == "DELETE":
+        await db.delete(s)
+        await db.commit()
+        return {"message": "Service deleted successfully"}
+
+    try:
+        if status.upper() == "ACTIVE":
+            s.status = ServiceStatus.approved
+        elif status.upper() == "DRAFT":
+            s.status = ServiceStatus.draft
+        await db.commit()
+        await db.refresh(s)
+        return {"message": "Status updated successfully", "status": s.status.value if hasattr(s.status, "value") else str(s.status)}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.post("/users/status")
+async def change_user_status(
+    request: Request,
+    user_id: Optional[str] = Form(None),
+    status: Optional[str] = Form(None),
+    db: AsyncSession = Depends(get_session)
+):
+    from app.models.user import Users, UserStatus
+    from sqlmodel import select
+
+    if not user_id or not status:
+        try:
+            body = await request.json()
+            user_id = user_id or body.get("user_id") or body.get("userId")
+            status = status or body.get("status")
+        except Exception:
+            pass
+
+    if not user_id or not status:
+        raise HTTPException(status_code=400, detail="Missing user_id or status")
+
+    try:
+        user_uuid = uuid.UUID(user_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid user_id format")
+
+    stmt = select(Users).where(Users.id == user_uuid)
+    res = await db.execute(stmt)
+    u = res.scalar_one_or_none()
+    if not u:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    if status.upper() == "DELETE":
+        await db.delete(u)
+        await db.commit()
+        return {"message": "User deleted successfully"}
+
+    try:
+        if status.upper() == "ACTIVE":
+            u.status = UserStatus.active
+        elif status.upper() == "INACTIVE":
+            u.status = UserStatus.inactive
+        elif status.upper() == "BANNED":
+            u.status = UserStatus.banned
+        await db.commit()
+        await db.refresh(u)
+        return {"message": "User status updated successfully", "status": u.status.value if hasattr(u.status, "value") else str(u.status)}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.post("/notifications")
+async def create_admin_notification(
+    request: Request,
+    db: AsyncSession = Depends(get_session)
+):
+    from app.models.notifications import AdminNotification
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid JSON body")
+
+    title = body.get("title")
+    message = body.get("message")
+    recipients = body.get("recipients")
+    delivery_type = body.get("type")
+
+    if not title or not message or not recipients or not delivery_type:
+        raise HTTPException(status_code=400, detail="Missing required fields")
+
+    notif = AdminNotification(
+        title=title,
+        message=message,
+        recipients=recipients,
+        type=delivery_type,
+        status="DELIVERED"
+    )
+    db.add(notif)
+    await db.commit()
+    await db.refresh(notif)
+    return notif
+
+
+@router.get("/notifications")
+async def list_admin_notifications(
+    db: AsyncSession = Depends(get_session)
+):
+    from app.models.notifications import AdminNotification
+    from sqlmodel import select
+    stmt = select(AdminNotification).order_by(AdminNotification.created_at.desc())
+    res = await db.execute(stmt)
+    notifications = res.scalars().all()
+    return notifications
+
+
+@router.delete("/notifications/{notification_id}")
+async def delete_admin_notification(
+    notification_id: str,
+    db: AsyncSession = Depends(get_session)
+):
+    from app.models.notifications import AdminNotification
+    from sqlmodel import select
+
+    try:
+        notif_uuid = uuid.UUID(notification_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid notification_id format")
+
+    stmt = select(AdminNotification).where(AdminNotification.id == notif_uuid)
+    res = await db.execute(stmt)
+    n = res.scalar_one_or_none()
+    if not n:
+        raise HTTPException(status_code=404, detail="Notification not found")
+
+    await db.delete(n)
+    await db.commit()
+    return {"message": "Notification deleted successfully"}
+
+
+@router.get("/categories")
+async def list_super_admin_categories(db: AsyncSession = Depends(get_session)):
+    from app.models.services import ServiceCategory
+    from sqlmodel import select
+    stmt = select(ServiceCategory)
+    res = await db.execute(stmt)
+    return res.scalars().all()
+
+
+@router.post("/categories")
+async def create_super_admin_category(req: Request, db: AsyncSession = Depends(get_session)):
+    from app.models.services import ServiceCategory
+    try:
+        body = await req.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid JSON body")
+    name = body.get("name")
+    if not name:
+        raise HTTPException(status_code=400, detail="Missing name")
+    cat = ServiceCategory(name=name)
+    db.add(cat)
+    await db.commit()
+    await db.refresh(cat)
+    return cat
+
+
+@router.put("/categories/{category_id}")
+async def update_super_admin_category(category_id: str, req: Request, db: AsyncSession = Depends(get_session)):
+    from app.models.services import ServiceCategory
+    from sqlmodel import select
+    try:
+        cat_uuid = uuid.UUID(category_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid UUID")
+    try:
+        body = await req.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid JSON body")
+    name = body.get("name")
+    if not name:
+        raise HTTPException(status_code=400, detail="Missing name")
+    stmt = select(ServiceCategory).where(ServiceCategory.id == cat_uuid)
+    res = await db.execute(stmt)
+    cat = res.scalar_one_or_none()
+    if not cat:
+        raise HTTPException(status_code=404, detail="Category not found")
+    cat.name = name
+    await db.commit()
+    await db.refresh(cat)
+    return cat
+
+
+@router.delete("/categories/{category_id}")
+async def delete_super_admin_category(category_id: str, db: AsyncSession = Depends(get_session)):
+    from app.models.services import ServiceCategory
+    from sqlmodel import select
+    try:
+        cat_uuid = uuid.UUID(category_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid UUID")
+    stmt = select(ServiceCategory).where(ServiceCategory.id == cat_uuid)
+    res = await db.execute(stmt)
+    cat = res.scalar_one_or_none()
+    if not cat:
+        raise HTTPException(status_code=404, detail="Category not found")
+    await db.delete(cat)
+    await db.commit()
+    return {"message": "Category deleted successfully"}
+
+
+@router.post("/change-password")
+async def super_admin_change_password(
+    req: Request,
+    db: AsyncSession = Depends(get_session)
+):
+    from app.models.user import Users
+    from sqlmodel import select
+    from app.core.security import get_password_hash
+
+    try:
+        body = await req.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid JSON body")
+
+    user_id = body.get("user_id")
+    new_pass = body.get("password")
+
+    if not user_id or not new_pass:
+        raise HTTPException(status_code=400, detail="Missing user_id or password")
+
+    try:
+        user_uuid = uuid.UUID(user_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid user_id format")
+
+    stmt = select(Users).where(Users.id == user_uuid)
+    res = await db.execute(stmt)
+    user = res.scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    user.password_hash = get_password_hash(new_pass)
+    await db.commit()
+    return {"message": "Password updated successfully"}
+
+
+# ──────────────────────────────────────────────
+#  ADMIN-FACING USER MANAGEMENT ENDPOINTS
+# ──────────────────────────────────────────────
+
+@router.get("/admin-users")
+async def list_admin_users(
+    search: Optional[str] = None,
+    status: Optional[str] = None,
+    page: int = 1,
+    limit: int = 50,
+    db: AsyncSession = Depends(get_session),
+):
+    """Return paginated list of all platform users with service counts and KYC status."""
+    from app.models.user import Users
+    from app.models.services import Service
+    from app.models.kyc import KYC
+    from sqlmodel import select, func
+    from sqlalchemy.orm import selectinload
+
+    stmt = select(Users)
+    if search:
+        stmt = stmt.where(
+            (Users.username.ilike(f"%{search}%")) | (Users.email.ilike(f"%{search}%"))
+        )
+    if status:
+        from app.models.user import UserStatus
+        try:
+            stmt = stmt.where(Users.status == UserStatus(status.lower()))
+        except Exception:
+            pass
+
+    total_res = await db.execute(select(func.count()).select_from(stmt.subquery()))
+    total = total_res.scalar() or 0
+
+    stmt = stmt.order_by(Users.created_at.desc()).offset((page - 1) * limit).limit(limit)
+    result = await db.execute(stmt)
+    users = result.scalars().all()
+
+    rows = []
+    for u in users:
+        # service count
+        svc_res = await db.execute(
+            select(func.count()).select_from(Service).where(Service.user_id == u.id)
+        )
+        svc_count = svc_res.scalar() or 0
+
+        # KYC status
+        kyc_res = await db.execute(select(KYC).where(KYC.user_id == u.id))
+        kyc = kyc_res.scalar_one_or_none()
+        kyc_status = kyc.status.value.upper() if kyc and hasattr(kyc.status, "value") else (str(kyc.status).upper() if kyc else "PENDING")
+
+        rows.append({
+            "id": str(u.id),
+            "name": u.username,
+            "email": u.email,
+            "services": svc_count,
+            "joined": u.created_at.strftime("%d/%m/%Y") if u.created_at else "",
+            "joined_iso": u.created_at.isoformat() if u.created_at else "",
+            "status": u.status.value.upper() if hasattr(u.status, "value") else str(u.status).upper(),
+            "kycStatus": kyc_status,
+            "email_verified": u.email_verified,
+        })
+
+    return {"users": rows, "total": total, "page": page, "limit": limit}
+
+
+@router.get("/admin-users/{user_id}")
+async def get_admin_user_detail(user_id: str, db: AsyncSession = Depends(get_session)):
+    """Return full profile detail for a single user (for the Overview tab)."""
+    from app.models.user import Users
+    from app.models.kyc import KYC
+    from sqlmodel import select
+    try:
+        uid = uuid.UUID(user_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid user_id")
+
+    res = await db.execute(select(Users).where(Users.id == uid))
+    u = res.scalar_one_or_none()
+    if not u:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    kyc_res = await db.execute(select(KYC).where(KYC.user_id == uid))
+    kyc = kyc_res.scalar_one_or_none()
+    kyc_status = kyc.status.value.upper() if kyc and hasattr(kyc.status, "value") else (str(kyc.status).upper() if kyc else "PENDING")
+
+    return {
+        "id": str(u.id),
+        "username": u.username,
+        "email": u.email,
+        "status": u.status.value.upper() if hasattr(u.status, "value") else str(u.status).upper(),
+        "email_verified": u.email_verified,
+        "phone_verified": u.phone_verified,
+        "created_at": u.created_at.isoformat() if u.created_at else None,
+        "kyc_status": kyc_status,
+        # KYC personal info
+        "kyc_first_name": kyc.first_name if kyc else None,
+        "kyc_last_name": kyc.last_name if kyc else None,
+        "kyc_date_of_birth": str(kyc.date_of_birth) if kyc and kyc.date_of_birth else None,
+        "kyc_nationality": kyc.nationality if kyc else None,
+        "kyc_address": f"{kyc.address_line_1}, {kyc.city}, {kyc.country} {kyc.postal_code}".strip(", ") if kyc and kyc.address_line_1 else None,
+        # KYC document info
+        "kyc_document_type": kyc.id_document_type.value if kyc and kyc.id_document_type else None,
+        "kyc_document_number": kyc.id_document_value if kyc else None,
+        "kyc_document_url": kyc.id_document_s3_key if kyc else None,
+        # KYC dates
+        "kyc_verified_date": kyc.reviewed_at.isoformat() if kyc and kyc.reviewed_at else None,
+        "kyc_uploaded_date": kyc.submitted_at.isoformat() if kyc and kyc.submitted_at else None,
+        "kyc_created_at": kyc.created_at.isoformat() if kyc and kyc.created_at else None,
+        "kyc_rejection_reason": kyc.rejection_reason if kyc else None,
+    }
+
+
+@router.get("/admin-users/{user_id}/services")
+async def get_admin_user_services(user_id: str, db: AsyncSession = Depends(get_session)):
+    """Return all services listed by a user."""
+    from app.models.services import Service
+    from sqlmodel import select
+    try:
+        uid = uuid.UUID(user_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid user_id")
+
+    res = await db.execute(
+        select(Service).where(Service.user_id == uid).order_by(Service.created_at.desc())
+    )
+    services = res.scalars().all()
+    return [
+        {
+            "id": str(s.id),
+            "title": s.name,
+            "type": s.type.value if hasattr(s.type, "value") else str(s.type),
+            "price": f"₦{s.price:,.0f}",
+            "date": s.created_at.strftime("%d/%m/%Y") if s.created_at else "",
+            "status": s.status.value.upper() if hasattr(s.status, "value") else str(s.status).upper(),
+        }
+        for s in services
+    ]
+
+
+@router.get("/admin-users/{user_id}/transactions")
+async def get_admin_user_transactions(user_id: str, db: AsyncSession = Depends(get_session)):
+    """Return all transactions for a user."""
+    from app.models.transactions import Transaction
+    from sqlmodel import select
+    try:
+        uid = uuid.UUID(user_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid user_id")
+
+    # Transaction uses users_id (not user_id) as the FK column
+    res = await db.execute(
+        select(Transaction).where(Transaction.users_id == uid).order_by(Transaction.created_at.desc())
+    )
+    txns = res.scalars().all()
+    return [
+        {
+            "id": str(t.id),
+            "reference": t.reference,
+            "type": t.type.value if hasattr(t.type, "value") else str(t.type),
+            "amount": f"\u20a6{t.amount_cents / 100:,.2f}",
+            "amount_raw": t.amount_cents,
+            "dateTime": t.created_at.strftime("%d/%m/%Y , %I:%M%p") if t.created_at else "",
+            "status": t.status.value.upper() if hasattr(t.status, "value") else str(t.status).upper(),
+        }
+        for t in txns
+    ]
+
+
+@router.get("/admin-users/{user_id}/negotiations")
+async def get_admin_user_negotiations(user_id: str, db: AsyncSession = Depends(get_session)):
+    """Return all negotiations involving a user."""
+    from app.models.price_negotiation import PriceNegotiation  # singular, not plural
+    from sqlmodel import select, or_
+    try:
+        uid = uuid.UUID(user_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid user_id")
+
+    res = await db.execute(
+        select(PriceNegotiation).where(
+            or_(PriceNegotiation.initiator_id == uid, PriceNegotiation.receiver_id == uid)
+        ).order_by(PriceNegotiation.created_at.desc())
+    )
+    negs = res.scalars().all()
+    rows = []
+    for n in negs:
+        rows.append({
+            "id": str(n.id),
+            "title": n.message or "Negotiation",  # field is 'message', not 'note'
+            "negotiator": str(n.initiator_id)[:8],
+            "servicePrice": "\u20a6" + f"{n.proposed_price_cents / 100:,.0f}",  # no original_price; use proposed
+            "negotiationPrice": "\u20a6" + f"{n.proposed_price_cents / 100:,.0f}",
+            "date": n.created_at.strftime("%d/%m/%Y") if n.created_at else "",
+            "status": n.status.value.upper() if hasattr(n.status, "value") else str(n.status).upper(),
+        })
+    return rows
+
+
+@router.get("/admin-users/{user_id}/escrows")
+async def get_admin_user_escrows(user_id: str, db: AsyncSession = Depends(get_session)):
+    """Return all escrows involving a user via their wallets."""
+    from app.models.escrow import Escrow
+    from app.models.wallet import Wallet
+    from sqlmodel import select, or_
+    try:
+        uid = uuid.UUID(user_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid user_id")
+
+    # Escrow links to Wallet, not directly to User. Find user's wallet IDs first.
+    wallet_res = await db.execute(select(Wallet).where(Wallet.user_id == uid))
+    wallets = wallet_res.scalars().all()
+    wallet_ids = [w.id for w in wallets]
+
+    if not wallet_ids:
+        return []
+
+    res = await db.execute(
+        select(Escrow).where(
+            or_(Escrow.payer_wallet_id.in_(wallet_ids), Escrow.payee_wallet_id.in_(wallet_ids))
+        ).order_by(Escrow.created_at.desc())
+    )
+    escrows = res.scalars().all()
+    return [
+        {
+            "id": str(e.id),
+            "title": f"Escrow #{str(e.id)[:8].upper()}",
+            "counterparty": str(e.payee_wallet_id)[:8] if e.payer_wallet_id in wallet_ids else str(e.payer_wallet_id)[:8],
+            "amount": f"\u20a6{e.amount_cents / 100:,.2f}",
+            "date": e.created_at.strftime("%d/%m/%Y") if e.created_at else "",
+            "status": e.status.value.upper() if hasattr(e.status, "value") else str(e.status).upper(),
+        }
+        for e in escrows
+    ]
+
+
+@router.get("/admin-users/{user_id}/reviews")
+async def get_admin_user_reviews(user_id: str, db: AsyncSession = Depends(get_session)):
+    """Return all reviews on a user's portfolio."""
+    from app.models.portfolio import Review, UserPortfolio  # Review is in portfolio.py
+    from app.models.user import Users
+    from sqlmodel import select
+    try:
+        uid = uuid.UUID(user_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid user_id")
+
+    # Review links to portfolio, not directly to user. Find portfolio first.
+    portfolio_res = await db.execute(select(UserPortfolio).where(UserPortfolio.user_id == uid))
+    portfolio = portfolio_res.scalar_one_or_none()
+    if not portfolio:
+        return []
+
+    res = await db.execute(
+        select(Review).where(Review.portfolio_id == portfolio.id).order_by(Review.created_at.desc())
+    )
+    reviews = res.scalars().all()
+    rows = []
+    for r in reviews:
+        # Review.user_id is the reviewer
+        reviewer_name = str(r.user_id)[:8]
+        ures = await db.execute(select(Users).where(Users.id == r.user_id))
+        reviewer = ures.scalar_one_or_none()
+        if reviewer:
+            reviewer_name = reviewer.username
+        rows.append({
+            "id": str(r.id),
+            "person": reviewer_name,
+            "rating": r.rating,
+            "message": r.comment or "",
+            "date": r.created_at.strftime("%d/%m/%Y") if r.created_at else "",
+        })
+    return rows
+
+
+@router.get("/admin-users/{user_id}/wallets")
+async def get_admin_user_wallets(user_id: str, db: AsyncSession = Depends(get_session)):
+    """Return wallet balances for a user."""
+    from app.models.wallet import Wallet  # singular: wallet.py not wallets.py
+    from sqlmodel import select
+    try:
+        uid = uuid.UUID(user_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid user_id")
+
+    res = await db.execute(select(Wallet).where(Wallet.user_id == uid))
+    wallets = res.scalars().all()
+    return [
+        {
+            "id": str(w.id),
+            "type": w.wallet_type.value if hasattr(w.wallet_type, "value") else str(w.wallet_type),
+            "balance": w.balance_cents,  # field is balance_cents, not balance
+        }
+        for w in wallets
+    ]
+
+
+@router.post("/admin-users/{user_id}/status")
+async def update_admin_user_status(user_id: str, req: Request, db: AsyncSession = Depends(get_session)):
+    """Suspend, activate or ban a platform user."""
+    from app.models.user import Users, UserStatus
+    from sqlmodel import select
+    try:
+        uid = uuid.UUID(user_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid user_id")
+    try:
+        body = await req.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid JSON body")
+
+    action = body.get("status", "").lower()
+    res = await db.execute(select(Users).where(Users.id == uid))
+    u = res.scalar_one_or_none()
+    if not u:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    status_map = {"active": UserStatus.active, "inactive": UserStatus.inactive, "banned": UserStatus.banned}
+    if action not in status_map:
+        raise HTTPException(status_code=400, detail=f"Invalid status. Use: {list(status_map.keys())}")
+
+    u.status = status_map[action]
+    await db.commit()
+    await db.refresh(u)
+    return {"message": f"User status updated to {action}", "status": action}
+
+
+# ──────────────────────────────────────────────
+#  ADMIN-FACING DRIVER MANAGEMENT ENDPOINTS
+# ──────────────────────────────────────────────
+
+@router.get("/admin-drivers")
+async def list_admin_drivers(
+    search: Optional[str] = None,
+    status: Optional[str] = None,
+    page: int = 1,
+    limit: int = 50,
+    db: AsyncSession = Depends(get_session),
+):
+    """Return paginated list of all rides (drivers page table)."""
+    from app.models.driving import Ride, DriverProfile
+    from app.models.user import Users
+    from sqlmodel import select, func, or_
+    
+    stmt = select(Ride, DriverProfile, Users).join(DriverProfile, Ride.driver_id == DriverProfile.id).join(Users, DriverProfile.user_id == Users.id)
+    
+    if search:
+        stmt = stmt.where(
+            or_(
+                Users.username.ilike(f"%{search}%"),
+                Ride.start_location.ilike(f"%{search}%"),
+                Ride.destination.ilike(f"%{search}%")
+            )
+        )
+    
+    if status:
+        from app.models.driving import RideStatus
+        try:
+            stmt = stmt.where(Ride.status == RideStatus(status.lower()))
+        except Exception:
+            pass
+
+    total_res = await db.execute(select(func.count()).select_from(stmt.subquery()))
+    total = total_res.scalar() or 0
+
+    stmt = stmt.order_by(Ride.start_time.desc()).offset((page - 1) * limit).limit(limit)
+    result = await db.execute(stmt)
+    rows = result.all()
+
+    items = []
+    for ride, profile, user in rows:
+        items.append({
+            "id": str(ride.id),
+            "driver_id": str(profile.id),
+            "name": user.username,
+            "passenger": user.username, 
+            "destination": ride.destination,
+            "servicePrice": f"\u20a6{ride.earnings:,.0f}",
+            "negotiationPrice": f"\u20a6{ride.earnings:,.0f}",
+            "time": ride.start_time.strftime("%d/%m/%Y - %I:%M %p") if ride.start_time else "",
+            "status": ride.status.value.upper()
+        })
+
+    # Summary counts
+    active_count = (await db.execute(select(func.count()).select_from(Ride).where(Ride.status == "started"))).scalar() or 0
+    completed_count = (await db.execute(select(func.count()).select_from(Ride).where(Ride.status == "completed"))).scalar() or 0
+    cancelled_count = (await db.execute(select(func.count()).select_from(Ride).where(Ride.status == "cancelled"))).scalar() or 0
+
+    return {
+        "rides": items, 
+        "total": total, 
+        "page": page, 
+        "limit": limit,
+        "summary": {
+            "active": active_count,
+            "completed": completed_count,
+            "cancelled": cancelled_count
+        }
+    }
+
+@router.get("/admin-drivers/{driver_id}")
+async def get_admin_driver_detail(driver_id: str, db: AsyncSession = Depends(get_session)):
+    """Return driver profile detail."""
+    from app.models.driving import DriverProfile
+    from app.models.user import Users
+    from app.models.kyc import KYC
+    from sqlmodel import select
+    
+    try:
+        did = uuid.UUID(driver_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid driver_id")
+        
+    stmt = select(DriverProfile, Users).join(Users, DriverProfile.user_id == Users.id).where(DriverProfile.id == did)
+    res = await db.execute(stmt)
+    result = res.all()
+    if not result:
+        raise HTTPException(status_code=404, detail="Driver not found")
+    
+    profile, user = result[0]
+    
+    kyc_res = await db.execute(select(KYC).where(KYC.user_id == user.id))
+    kyc = kyc_res.scalar_one_or_none()
+    kyc_status = kyc.status.value.upper() if kyc and hasattr(kyc.status, "value") else (str(kyc.status).upper() if kyc else "PENDING")
+
+    return {
+        "id": str(profile.id),
+        "user_id": str(user.id),
+        "name": user.username,
+        "email": user.email,
+        "phone": getattr(user, "phone", "\u2014"),
+        "car_name": profile.car_name,
+        "car_model": profile.car_model,
+        "plate_number": profile.plate_number,
+        "successful_rides": profile.successful_rides,
+        "total_rides": profile.total_rides,
+        "failed_rides": profile.failed_rides,
+        "rank": profile.rank.value.upper(),
+        "status": profile.status.value.upper(),
+        "created_at": profile.created_at.isoformat() if profile.created_at else None,
+        "kyc_status": kyc_status,
+        "email_verified": user.email_verified,
+    }
+
+@router.get("/admin-drivers/{driver_id}/rides")
+async def get_admin_driver_rides(driver_id: str, status: Optional[str] = None, db: AsyncSession = Depends(get_session)):
+    from app.models.driving import Ride
+    from sqlmodel import select
+    
+    try:
+        did = uuid.UUID(driver_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid driver_id")
+        
+    stmt = select(Ride).where(Ride.driver_id == did)
+    if status:
+        from app.models.driving import RideStatus
+        try:
+            stmt = stmt.where(Ride.status == RideStatus(status.lower()))
+        except Exception:
+            pass
+            
+    stmt = stmt.order_by(Ride.start_time.desc())
+    res = await db.execute(stmt)
+    rides = res.scalars().all()
+    
+    return [
+        {
+            "id": str(r.id),
+            "start_location": r.start_location,
+            "destination": r.destination,
+            "status": r.status.value.upper(),
+            "earnings": r.earnings,
+            "start_time": r.start_time.isoformat() if r.start_time else None,
+            "end_time": r.end_time.isoformat() if r.end_time else None,
+        }
+        for r in rides
+    ]
+
+@router.post("/admin-drivers/{driver_id}/status")
+async def update_admin_driver_status(driver_id: str, req: Request, db: AsyncSession = Depends(get_session)):
+    from app.models.driving import DriverProfile, DriverStatus
+    from sqlmodel import select
+    
+    try:
+        did = uuid.UUID(driver_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid driver_id")
+        
+    body = await req.json()
+    action = body.get("status", "").lower()
+    
+    res = await db.execute(select(DriverProfile).where(DriverProfile.id == did))
+    profile = res.scalar_one_or_none()
+    if not profile:
+        raise HTTPException(status_code=404, detail="Driver not found")
+        
+    status_map = {
+        "active": DriverStatus.ACTIVE,
+        "suspended": DriverStatus.SUSPENDED,
+        "banned": DriverStatus.BANNED,
+        "pending": DriverStatus.PENDING
+    }
+    
+    if action not in status_map:
+        raise HTTPException(status_code=400, detail=f"Invalid status. Use: {list(status_map.keys())}")
+        
+    profile.status = status_map[action]
+    await db.commit()
+    return {"message": f"Driver status updated to {action}", "status": action}
+
+
+# ──────────────────────────────────────────────
+#  ADMIN-FACING KYC MANAGEMENT ENDPOINTS
+# ──────────────────────────────────────────────
+
+@router.get("/admin-kyc")
+async def list_admin_kyc(
+    status: Optional[str] = "pending",
+    page: int = 1,
+    limit: int = 50,
+    db: AsyncSession = Depends(get_session),
+):
+    """List all KYC submissions."""
+    from app.models.kyc import KYC, KYCStatus
+    from app.models.user import Users
+    from sqlmodel import select, func
+    
+    stmt = select(KYC, Users).join(Users, KYC.user_id == Users.id)
+    
+    if status and status.lower() != "all":
+        try:
+            stmt = stmt.where(KYC.status == KYCStatus(status.lower()))
+        except Exception:
+            pass
+            
+    total_res = await db.execute(select(func.count()).select_from(stmt.subquery()))
+    total = total_res.scalar() or 0
+    
+    stmt = stmt.order_by(KYC.submitted_at.desc()).offset((page - 1) * limit).limit(limit)
+    res = await db.execute(stmt)
+    rows = res.all()
+    
+    items = []
+    for kyc, user in rows:
+        items.append({
+            "id": str(kyc.user_id),
+            "user_id": str(user.id),
+            "name": f"{getattr(user, 'first_name', '')} {getattr(user, 'last_name', '')}".strip() or user.username,
+            "email": user.email,
+            "id_type": kyc.id_document_type.value if hasattr(kyc.id_document_type, "value") else str(kyc.id_document_type),
+            "id_value": kyc.id_document_value,
+            "submitted_at": kyc.submitted_at.strftime("%d/%m/%Y") if kyc.submitted_at else "\u2014",
+            "status": kyc.status.value.upper() if hasattr(kyc.status, "value") else str(kyc.status).upper(),
+        })
+        
+    # Stats
+    pending_count = (await db.execute(select(func.count()).select_from(KYC).where(KYC.status == KYCStatus.pending))).scalar() or 0
+    verified_count = (await db.execute(select(func.count()).select_from(KYC).where(KYC.status == KYCStatus.verified))).scalar() or 0
+    rejected_count = (await db.execute(select(func.count()).select_from(KYC).where(KYC.status == KYCStatus.rejected))).scalar() or 0
+    
+    return {
+        "items": items,
+        "total": total,
+        "summary": {
+            "pending": pending_count,
+            "verified": verified_count,
+            "rejected": rejected_count
+        }
+    }
+
+@router.get("/admin-kyc/{user_id}")
+async def get_admin_kyc_detail(user_id: str, db: AsyncSession = Depends(get_session)):
+    from app.models.kyc import KYC
+    from app.models.user import Users
+    from sqlmodel import select
+    
+    try:
+        uid = uuid.UUID(user_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid user_id")
+        
+    stmt = select(KYC, Users).join(Users, KYC.user_id == Users.id).where(KYC.user_id == uid)
+    res = await db.execute(stmt)
+    result = res.all()
+    if not result:
+        raise HTTPException(status_code=404, detail="KYC not found for this user")
+        
+    kyc, user = result[0]
+    
+    return {
+        "id": str(kyc.user_id),
+        "user_id": str(user.id),
+        "name": f"{getattr(user, 'first_name', '')} {getattr(user, 'last_name', '')}".strip() or user.username,
+        "email": user.email,
+        "id_type": kyc.id_document_type.value if hasattr(kyc.id_document_type, "value") else str(kyc.id_document_type),
+        "id_value": kyc.id_document_value,
+        "id_document_url": kyc.id_document_s3_key,
+        "submitted_at": kyc.submitted_at.isoformat() if kyc.submitted_at else None,
+        "reviewed_at": kyc.reviewed_at.isoformat() if kyc.reviewed_at else None,
+        "status": kyc.status.value.upper() if hasattr(kyc.status, "value") else str(kyc.status).upper(),
+        "rejection_reason": kyc.rejection_reason,
+        "personal_info": {
+            "nationality": getattr(user, "nationality", "\u2014"),
+            "address": getattr(user, "address", "\u2014"),
+            "dob": getattr(user, "dob", "\u2014"),
+        }
+    }
+
+@router.post("/admin-kyc/{user_id}/review")
+async def review_admin_kyc(user_id: str, req: Request, db: AsyncSession = Depends(get_session)):
+    from app.models.kyc import KYC, KYCStatus
+    from datetime import datetime, timezone
+    from sqlmodel import select
+    
+    try:
+        uid = uuid.UUID(user_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid user_id")
+        
+    body = await req.json()
+    action = body.get("action", "").lower() # approve or reject
+    reason = body.get("reason", "")
+    
+    res = await db.execute(select(KYC).where(KYC.user_id == uid))
+    kyc = res.scalar_one_or_none()
+    if not kyc:
+        raise HTTPException(status_code=404, detail="KYC not found")
+        
+    if action == "approve":
+        kyc.status = KYCStatus.verified
+    elif action == "reject":
+        kyc.status = KYCStatus.rejected
+        kyc.rejection_reason = reason
+    else:
+        raise HTTPException(status_code=400, detail="Invalid action. Use 'approve' or 'reject'")
+        
+    kyc.reviewed_at = datetime.now(timezone.utc)
+    await db.commit()
+    return {"message": f"KYC {action}d successfully", "status": kyc.status.value.upper()}
+
+
+# ──────────────────────────────────────────────
+#  ADMIN-FACING NEGOTIATION MANAGEMENT ENDPOINTS
+# ──────────────────────────────────────────────
+
+@router.get("/admin-negotiations")
+async def list_admin_negotiations(
+    status: Optional[str] = "pending",
+    page: int = 1,
+    limit: int = 50,
+    db: AsyncSession = Depends(get_session),
+):
+    """List all price negotiations."""
+    from app.models.price_negotiation import PriceNegotiation, NegotiationStatus
+    from app.models.user import Users
+    from app.models.services import Service
+    from sqlmodel import select, func
+    from sqlalchemy.orm import aliased
+    
+    Initiator = aliased(Users)
+    Receiver = aliased(Users)
+    
+    stmt = select(PriceNegotiation, Initiator, Receiver, Service)\
+        .join(Initiator, PriceNegotiation.initiator_id == Initiator.id)\
+        .join(Receiver, PriceNegotiation.receiver_id == Receiver.id)\
+        .join(Service, PriceNegotiation.service_id == Service.id)
+    
+    if status and status.lower() != "all":
+        try:
+            stmt = stmt.where(PriceNegotiation.status == NegotiationStatus(status.lower()))
+        except Exception:
+            pass
+            
+    total_res = await db.execute(select(func.count()).select_from(stmt.subquery()))
+    total = total_res.scalar() or 0
+    
+    stmt = stmt.order_by(PriceNegotiation.created_at.desc()).offset((page - 1) * limit).limit(limit)
+    res = await db.execute(stmt)
+    rows = res.all()
+    
+    items = []
+    for neg, init, recv, svc in rows:
+        items.append({
+            "id": str(neg.id),
+            "service_name": svc.name,
+            "initiator_name": init.username,
+            "receiver_name": recv.username,
+            "proposed_price": f"\u20a6{neg.proposed_price_cents / 100:,.2f}",
+            "original_price": f"\u20a6{svc.price:,.2f}" if svc.price else "\u2014",
+            "message": neg.message,
+            "status": neg.status.value.upper(),
+            "created_at": neg.created_at.strftime("%d/%m/%Y - %I:%M %p") if neg.created_at else "\u2014",
+        })
+        
+    # Stats
+    pending_count = (await db.execute(select(func.count()).select_from(PriceNegotiation).where(PriceNegotiation.status == NegotiationStatus.pending))).scalar() or 0
+    accepted_count = (await db.execute(select(func.count()).select_from(PriceNegotiation).where(PriceNegotiation.status == NegotiationStatus.accepted))).scalar() or 0
+    rejected_count = (await db.execute(select(func.count()).select_from(PriceNegotiation).where(PriceNegotiation.status == NegotiationStatus.rejected))).scalar() or 0
+    
+    return {
+        "items": items,
+        "total": total,
+        "summary": {
+            "pending": pending_count,
+            "accepted": accepted_count,
+            "rejected": rejected_count
+        }
+    }
+
+@router.get("/admin-negotiations/{negotiation_id}")
+async def get_negotiation_detail(
+    negotiation_id: str,
+    db: AsyncSession = Depends(get_session),
+):
+    """Get detailed information about a price negotiation."""
+    from app.models.price_negotiation import PriceNegotiation
+    from app.models.user import Users
+    from app.models.services import Service
+    from sqlmodel import select
+    from sqlalchemy.orm import aliased
+    
+    try:
+        nid = uuid.UUID(negotiation_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid negotiation_id")
+        
+    Initiator = aliased(Users)
+    Receiver = aliased(Users)
+    
+    stmt = select(PriceNegotiation, Initiator, Receiver, Service)\
+        .join(Initiator, PriceNegotiation.initiator_id == Initiator.id)\
+        .join(Receiver, PriceNegotiation.receiver_id == Receiver.id)\
+        .join(Service, PriceNegotiation.service_id == Service.id)\
+        .where(PriceNegotiation.id == nid)
+        
+    res = await db.execute(stmt)
+    result = res.all()
+    if not result:
+        raise HTTPException(status_code=404, detail="Negotiation not found")
+        
+    neg, init, recv, svc = result[0]
+    
+    return {
+        "id": str(neg.id),
+        "service": {
+            "id": str(svc.id),
+            "name": svc.name,
+            "original_price": f"\u20a6{svc.price:,.2f}"
+        },
+        "initiator": {
+            "id": str(init.id),
+            "username": init.username,
+            "email": init.email
+        },
+        "receiver": {
+            "id": str(recv.id),
+            "username": recv.username,
+            "email": recv.email
+        },
+        "proposed_price": f"\u20a6{neg.proposed_price_cents / 100:,.2f}",
+        "message": neg.message,
+        "status": neg.status.value.upper(),
+        "created_at": neg.created_at.isoformat() if neg.created_at else None,
+        "updated_at": neg.updated_at.isoformat() if neg.updated_at else None,
+    }
+
+@router.post("/admin-negotiations/{negotiation_id}/status")
+async def update_negotiation_status(
+    negotiation_id: str,
+    req: Request,
+    db: AsyncSession = Depends(get_session),
+):
+    """Update negotiation status (admin override)."""
+    from app.models.price_negotiation import PriceNegotiation, NegotiationStatus
+    from sqlmodel import select
+    
+    try:
+        nid = uuid.UUID(negotiation_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid negotiation_id")
+        
+    body = await req.json()
+    action = body.get("action", "").lower() # accept or reject
+    
+    res = await db.execute(select(PriceNegotiation).where(PriceNegotiation.id == nid))
+    neg = res.scalar_one_or_none()
+    if not neg:
+        raise HTTPException(status_code=404, detail="Negotiation not found")
+        
+    if action == "accept":
+        neg.status = NegotiationStatus.accepted
+    elif action == "reject":
+        neg.status = NegotiationStatus.rejected
+    else:
+        neg.status = NegotiationStatus.rejected if action == "reject" else NegotiationStatus.accepted
+    await db.commit()
+    return {"message": f"Negotiation {action}ed successfully", "status": neg.status.value.upper()}
+    
+@router.delete("/admin-negotiations/{negotiation_id}")
+async def delete_negotiation(
+    negotiation_id: str,
+    db: AsyncSession = Depends(get_session),
+):
+    """Delete a price negotiation."""
+    from app.models.price_negotiation import PriceNegotiation
+    
+    try:
+        nid = uuid.UUID(negotiation_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid negotiation_id")
+        
+    neg = await db.get(PriceNegotiation, nid)
+    if not neg:
+        raise HTTPException(status_code=404, detail="Negotiation not found")
+        
+    await db.delete(neg)
+    await db.commit()
+    return {"message": "Negotiation deleted successfully"}
+
+
+# ──────────────────────────────────────────────
+#  ADMIN-FACING ESCROW & TRANSACTION ENDPOINTS
+# ──────────────────────────────────────────────
+
+@router.get("/admin-escrows")
+async def list_admin_escrows(
+    status: Optional[str] = "held",
+    page: int = 1,
+    limit: int = 50,
+    db: AsyncSession = Depends(get_session),
+):
+    """List all escrows."""
+    from app.models.escrow import Escrow, EscrowStatus
+    from app.models.price_negotiation import PriceNegotiation
+    from app.models.services import Service
+    from app.models.user import Users
+    from app.models.wallet import Wallet
+    from sqlmodel import select, func
+    from sqlalchemy.orm import aliased
+    
+    PayerWallet = aliased(Wallet)
+    PayerUser = aliased(Users)
+    PayeeWallet = aliased(Wallet)
+    PayeeUser = aliased(Users)
+    
+    stmt = select(Escrow, PriceNegotiation, Service, PayerUser, PayeeUser)\
+        .join(PriceNegotiation, Escrow.payment_negotiation_id == PriceNegotiation.id)\
+        .join(Service, PriceNegotiation.service_id == Service.id)\
+        .join(PayerWallet, Escrow.payer_wallet_id == PayerWallet.id)\
+        .join(PayerUser, PayerWallet.user_id == PayerUser.id)\
+        .join(PayeeWallet, Escrow.payee_wallet_id == PayeeWallet.id)\
+        .join(PayeeUser, PayeeWallet.user_id == PayeeUser.id)
+        
+    if status and status.lower() != "all":
+        try:
+            stmt = stmt.where(Escrow.status == EscrowStatus(status.lower()))
+        except Exception:
+            pass
+            
+    total_res = await db.execute(select(func.count()).select_from(stmt.subquery()))
+    total = total_res.scalar() or 0
+    
+    stmt = stmt.order_by(Escrow.created_at.desc()).offset((page - 1) * limit).limit(limit)
+    res = await db.execute(stmt)
+    rows = res.all()
+    
+    items = []
+    for esc, neg, svc, payer, payee in rows:
+        items.append({
+            "id": str(esc.id),
+            "service_name": svc.name,
+            "payer_name": payer.username,
+            "payee_name": payee.username,
+            "amount": f"\u20a6{esc.amount_cents / 100:,.2f}",
+            "status": esc.status.value.upper(),
+            "created_at": esc.created_at.strftime("%d/%m/%Y") if esc.created_at else "\u2014",
+        })
+        
+    # Stats
+    held_count = (await db.execute(select(func.count()).select_from(Escrow).where(Escrow.status == EscrowStatus.held))).scalar() or 0
+    released_count = (await db.execute(select(func.count()).select_from(Escrow).where(Escrow.status == EscrowStatus.released))).scalar() or 0
+    refunded_count = (await db.execute(select(func.count()).select_from(Escrow).where(Escrow.status == EscrowStatus.refunded))).scalar() or 0
+    
+    return {
+        "items": items,
+        "total": total,
+        "summary": {
+            "held": held_count,
+            "released": released_count,
+            "refunded": refunded_count
+        }
+    }
+
+@router.get("/admin-escrows/{escrow_id}")
+async def get_admin_escrow_detail(
+    escrow_id: str,
+    db: AsyncSession = Depends(get_session),
+):
+    """Get full details of a specific escrow."""
+    from app.models.escrow import Escrow
+    from app.models.price_negotiation import PriceNegotiation
+    from app.models.services import Service, ServiceCategory, ServiceCategoryLink
+    from app.models.user import Users
+    from app.models.wallet import Wallet
+    from sqlmodel import select
+    from sqlalchemy.orm import aliased
+    
+    try:
+        eid = uuid.UUID(escrow_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid escrow_id")
+        
+    PayerWallet = aliased(Wallet)
+    PayerUser = aliased(Users)
+    PayeeWallet = aliased(Wallet)
+    PayeeUser = aliased(Users)
+    
+    stmt = select(Escrow, PriceNegotiation, Service, PayerUser, PayeeUser, ServiceCategory)\
+        .join(PriceNegotiation, Escrow.payment_negotiation_id == PriceNegotiation.id)\
+        .join(Service, PriceNegotiation.service_id == Service.id)\
+        .outerjoin(ServiceCategoryLink, Service.id == ServiceCategoryLink.service_id)\
+        .outerjoin(ServiceCategory, ServiceCategoryLink.category_id == ServiceCategory.id)\
+        .join(PayerWallet, Escrow.payer_wallet_id == PayerWallet.id)\
+        .join(PayerUser, PayerWallet.user_id == PayerUser.id)\
+        .join(PayeeWallet, Escrow.payee_wallet_id == PayeeWallet.id)\
+        .join(PayeeUser, PayeeWallet.user_id == PayeeUser.id)\
+        .where(Escrow.id == eid)
+        
+    res = await db.execute(stmt)
+    result = res.first()
+    
+    if not result:
+        raise HTTPException(status_code=404, detail="Escrow not found")
+        
+    esc, neg, svc, payer, payee, cat = result
+    
+    return {
+        "id": str(esc.id),
+        "amount": f"\u20a6{esc.amount_cents / 100:,.2f}",
+        "status": esc.status.value.upper(),
+        "created_at": esc.created_at.strftime("%d/%m/%Y %H:%M:%S") if esc.created_at else "\u2014",
+        "updated_at": esc.updated_at.strftime("%d/%m/%Y %H:%M:%S") if esc.updated_at else "\u2014",
+        "service": {
+            "name": svc.name,
+            "category": cat.name if cat else "General",
+            "description": svc.description,
+            "price": f"\u20a6{svc.price:,.2f}"
+        },
+        "negotiation": {
+            "proposed_price": f"\u20a6{neg.proposed_price_cents / 100:,.2f}",
+            "original_price": f"\u20a6{svc.price:,.2f}",
+            "status": neg.status.value
+        },
+        "payer": {
+            "username": payer.username,
+            "email": payer.email,
+            "full_name": payer.username
+        },
+        "payee": {
+            "username": payee.username,
+            "email": payee.email,
+            "full_name": payee.username
+        }
+    }
+
+@router.post("/admin-escrows/{escrow_id}/status")
+async def update_admin_escrow_status(
+    escrow_id: str,
+    payload: dict,
+    db: AsyncSession = Depends(get_session),
+):
+    """Manually update escrow status."""
+    from app.models.escrow import Escrow, EscrowStatus
+    from datetime import datetime
+    
+    try:
+        eid = uuid.UUID(escrow_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid escrow_id")
+        
+    new_status = payload.get("status")
+    if not new_status or new_status.lower() not in ["held", "released", "refunded"]:
+        raise HTTPException(status_code=400, detail="Invalid status")
+        
+    esc = await db.get(Escrow, eid)
+    if not esc:
+        raise HTTPException(status_code=404, detail="Escrow not found")
+        
+    esc.status = EscrowStatus(new_status.lower())
+    if esc.status == EscrowStatus.released:
+        esc.released_at = datetime.utcnow()
+    elif esc.status == EscrowStatus.refunded:
+        esc.refunded_at = datetime.utcnow()
+        
+    await db.commit()
+    return {"message": f"Escrow status updated to {new_status.upper()}"}
+
+@router.get("/admin-transactions")
+async def list_admin_transactions(
+    page: int = 1,
+    limit: int = 50,
+    db: AsyncSession = Depends(get_session),
+):
+    """List all transactions across the platform."""
+    from app.models.transactions import Transaction, TxnStatus
+    from app.models.user import Users
+    from sqlmodel import select, func
+    from datetime import datetime, timezone
+    
+    stmt = select(Transaction, Users).join(Users, Transaction.users_id == Users.id)
+    
+    total_res = await db.execute(select(func.count()).select_from(stmt.subquery()))
+    total = total_res.scalar() or 0
+    
+    stmt = stmt.order_by(Transaction.created_at.desc()).offset((page - 1) * limit).limit(limit)
+    res = await db.execute(stmt)
+    rows = res.all()
+    
+    items = []
+    for txn, user in rows:
+        items.append({
+            "id": str(txn.id),
+            "user_name": user.username,
+            "type": txn.type.value.upper(),
+            "amount": f"\u20a6{txn.amount_cents / 100:,.2f}",
+            "status": txn.status.value.upper(),
+            "reference": txn.reference,
+            "created_at": txn.created_at.strftime("%d/%m/%Y - %I:%M %p") if txn.created_at else "\u2014",
+        })
+        
+    # Summary stats for transactions
+    total_volume = (await db.execute(select(func.sum(Transaction.amount_cents)).where(Transaction.status == TxnStatus.completed))).scalar() or 0
+    today_volume = (await db.execute(select(func.sum(Transaction.amount_cents)).where(Transaction.status == TxnStatus.completed, Transaction.created_at >= datetime.now(timezone.utc).replace(hour=0, minute=0, second=0)))).scalar() or 0
+    
+    return {
+        "items": items,
+        "total": total,
+        "summary": {
+            "total_volume": f"\u20a6{total_volume / 100:,.2f}",
+            "today_volume": f"\u20a6{today_volume / 100:,.2f}",
+            "count": total
+        }
+    }
+
+@router.get("/admin-transactions/{transaction_id}")
+async def get_admin_transaction_detail(
+    transaction_id: str,
+    db: AsyncSession = Depends(get_session),
+):
+    """Get full details of a specific transaction."""
+    from app.models.transactions import Transaction
+    from app.models.user import Users
+    from app.models.wallet import Wallet
+    from sqlmodel import select
+    
+    try:
+        tid = uuid.UUID(transaction_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid transaction_id")
+        
+    stmt = select(Transaction, Users, Wallet)\
+        .join(Users, Transaction.users_id == Users.id)\
+        .join(Wallet, Transaction.wallet_id == Wallet.id)\
+        .where(Transaction.id == tid)
+        
+    res = await db.execute(stmt)
+    result = res.first()
+    
+    if not result:
+        raise HTTPException(status_code=404, detail="Transaction not found")
+        
+    txn, user, wallet = result
+    
+    return {
+        "id": str(txn.id),
+        "amount": f"\u20a6{txn.amount_cents / 100:,.2f}",
+        "status": txn.status.value.upper(),
+        "type": txn.type.value.upper(),
+        "reference": txn.reference,
+        "created_at": txn.created_at.strftime("%d/%m/%Y %H:%M:%S") if txn.created_at else "\u2014",
+        "updated_at": txn.updated_at.strftime("%d/%m/%Y %H:%M:%S") if txn.updated_at else "\u2014",
+        "user": {
+            "username": user.username,
+            "email": user.email,
+        },
+        "wallet": {
+            "id": str(wallet.id),
+            "balance": f"\u20a6{wallet.balance_cents / 100:,.2f}" if hasattr(wallet, "balance_cents") else "\u2014"
+        }
+    }
+@router.get("/admin-tickets")
+async def get_admin_tickets(
+    db: AsyncSession = Depends(get_session),
+):
+    """List all support tickets for admin view."""
+    from app.models.support_ticket import SupportTicket
+    from sqlmodel import select
+    
+    res = await db.execute(select(SupportTicket).order_by(SupportTicket.created_at.desc()))
+    tickets = res.scalars().all()
+    return tickets
+
+@router.get("/admin-tickets/{ticket_id}/replies")
+async def get_admin_ticket_replies(
+    ticket_id: str,
+    db: AsyncSession = Depends(get_session),
+):
+    """List replies for a specific ticket."""
+    from app.models.support_ticket import SupportTicketReply
+    from sqlmodel import select
+    
+    try:
+        tid = uuid.UUID(ticket_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid ticket_id")
+        
+    res = await db.execute(select(SupportTicketReply).where(SupportTicketReply.ticket_id == tid).order_by(SupportTicketReply.created_at.asc()))
+    return res.scalars().all()
+
+@router.get("/admin-tickets/{ticket_id}")
+async def get_admin_ticket(
+    ticket_id: str,
+    db: AsyncSession = Depends(get_session),
+):
+    """Get full details of a specific ticket."""
+    from app.models.support_ticket import SupportTicket
+    
+    try:
+        tid = uuid.UUID(ticket_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid ticket_id")
+        
+    ticket = await db.get(SupportTicket, tid)
+    if not ticket:
+        raise HTTPException(status_code=404, detail="Ticket not found")
+        
+    return ticket
+
+
+# ════════════════════════════════════════════════════════════════════════════
+#  ADMIN PAYMENT MANAGEMENT ENDPOINTS
+# ════════════════════════════════════════════════════════════════════════════
+
+@router.get("/payment-settings")
+async def get_payment_settings(db: AsyncSession = Depends(get_session)):
+    """Return the current platform payment settings."""
+    from app.services.payment_service import get_payment_settings as _get_settings
+    settings = await _get_settings(db)
+    return {
+        "id": settings.id,
+        "auto_approve_withdrawals": settings.auto_approve_withdrawals,
+        "screen_deposits": settings.screen_deposits,
+        "updated_at": settings.updated_at.isoformat() if settings.updated_at else None,
+    }
+
+
+@router.put("/payment-settings")
+async def update_payment_settings(
+    req: Request,
+    db: AsyncSession = Depends(get_session),
+):
+    """Update platform-wide payment settings (auto-approve, deposit screening)."""
+    from app.services.payment_service import update_payment_settings as _update_settings
+    try:
+        body = await req.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid JSON body")
+
+    auto_approve = body.get("auto_approve_withdrawals")
+    screen = body.get("screen_deposits")
+
+    settings = await _update_settings(db, auto_approve, screen)
+    return {
+        "id": settings.id,
+        "auto_approve_withdrawals": settings.auto_approve_withdrawals,
+        "screen_deposits": settings.screen_deposits,
+        "updated_at": settings.updated_at.isoformat() if settings.updated_at else None,
+    }
+
+
+@router.get("/withdrawals")
+async def list_withdrawals(
+    status: Optional[str] = None,
+    page: int = 1,
+    limit: int = 50,
+    db: AsyncSession = Depends(get_session),
+):
+    """List all withdrawal requests with optional status filter."""
+    from sqlmodel import select, func
+    from app.models.payment_request import WithdrawalRequest, WithdrawalStatus, UserBankAccount
+    from app.models.user import Users
+
+    stmt = select(WithdrawalRequest)
+    if status:
+        try:
+            stmt = stmt.where(WithdrawalRequest.status == WithdrawalStatus(status.lower()))
+        except ValueError:
+            pass
+
+    total_res = await db.execute(select(func.count()).select_from(stmt.subquery()))
+    total = total_res.scalar() or 0
+
+    stmt = stmt.order_by(WithdrawalRequest.created_at.desc()).offset((page - 1) * limit).limit(limit)
+    res = await db.execute(stmt)
+    withdrawals = res.scalars().all()
+
+    rows = []
+    for w in withdrawals:
+        user_res = await db.execute(select(Users).where(Users.id == w.user_id))
+        user = user_res.scalar_one_or_none()
+
+        bank_res = await db.execute(select(UserBankAccount).where(UserBankAccount.id == w.bank_account_id))
+        bank = bank_res.scalar_one_or_none()
+
+        rows.append({
+            "id": str(w.id),
+            "user_id": str(w.user_id),
+            "user_email": user.email if user else None,
+            "user_name": user.username if user else None,
+            "amount_cents": w.amount_cents,
+            "amount": f"₦{w.amount_cents / 100:,.2f}",
+            "currency": w.currency,
+            "status": w.status.value,
+            "rejection_reason": w.rejection_reason,
+            "bank_account_number": bank.account_number if bank else None,
+            "bank_account_name": bank.account_name if bank else None,
+            "bank_name": bank.bank_name if bank else None,
+            "monnify_reference": w.monnify_reference,
+            "reviewed_at": w.reviewed_at.isoformat() if w.reviewed_at else None,
+            "created_at": w.created_at.isoformat() if w.created_at else None,
+        })
+
+    return {"withdrawals": rows, "total": total, "page": page, "limit": limit}
+
+
+@router.post("/withdrawals/{withdrawal_id}/approve")
+async def approve_withdrawal(
+    withdrawal_id: str,
+    db: AsyncSession = Depends(get_session),
+):
+    """Approve a pending withdrawal — triggers Monnify disbursement."""
+    from app.services.payment_service import admin_approve_withdrawal
+    try:
+        wid = uuid.UUID(withdrawal_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid withdrawal_id")
+
+    # Using a fixed placeholder admin_id since we don't enforce admin auth here yet
+    admin_id = uuid.uuid4()  # Replace with get_current_admin().id when wired
+    withdrawal = await admin_approve_withdrawal(db, wid, admin_id)
+    return {"message": "Withdrawal approved and transfer initiated", "status": withdrawal.status.value}
+
+
+@router.post("/withdrawals/{withdrawal_id}/reject")
+async def reject_withdrawal(
+    withdrawal_id: str,
+    req: Request,
+    db: AsyncSession = Depends(get_session),
+):
+    """Reject a pending withdrawal with a reason."""
+    from app.services.payment_service import admin_reject_withdrawal
+    try:
+        wid = uuid.UUID(withdrawal_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid withdrawal_id")
+
+    try:
+        body = await req.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid JSON body")
+
+    reason = body.get("reason", "No reason provided")
+    admin_id = uuid.uuid4()  # Replace with get_current_admin().id when wired
+    withdrawal = await admin_reject_withdrawal(db, wid, admin_id, reason)
+    return {"message": "Withdrawal rejected", "status": withdrawal.status.value}
+
+
+@router.get("/deposits")
+async def list_deposits(
+    status: Optional[str] = None,
+    page: int = 1,
+    limit: int = 50,
+    db: AsyncSession = Depends(get_session),
+):
+    """List all deposit requests. Use status=screened_pending to see the review queue."""
+    from sqlmodel import select, func
+    from app.models.payment_request import DepositRequest, DepositStatus
+    from app.models.user import Users
+
+    stmt = select(DepositRequest)
+    if status:
+        try:
+            stmt = stmt.where(DepositRequest.status == DepositStatus(status.lower()))
+        except ValueError:
+            pass
+
+    total_res = await db.execute(select(func.count()).select_from(stmt.subquery()))
+    total = total_res.scalar() or 0
+
+    stmt = stmt.order_by(DepositRequest.created_at.desc()).offset((page - 1) * limit).limit(limit)
+    res = await db.execute(stmt)
+    deposits = res.scalars().all()
+
+    rows = []
+    for d in deposits:
+        user_res = await db.execute(select(Users).where(Users.id == d.user_id))
+        user = user_res.scalar_one_or_none()
+
+        rows.append({
+            "id": str(d.id),
+            "user_id": str(d.user_id),
+            "user_email": user.email if user else None,
+            "user_name": user.username if user else None,
+            "amount_cents": d.amount_cents,
+            "amount": f"₦{d.amount_cents / 100:,.2f}",
+            "currency": d.currency,
+            "status": d.status.value,
+            "monnify_reference": d.monnify_reference,
+            "payment_link": d.payment_link,
+            "created_at": d.created_at.isoformat() if d.created_at else None,
+        })
+
+    return {"deposits": rows, "total": total, "page": page, "limit": limit}
+
+
+@router.post("/deposits/{deposit_id}/approve")
+async def approve_deposit(
+    deposit_id: str,
+    db: AsyncSession = Depends(get_session),
+):
+    """Approve a screened (held) deposit — credits user's wallet."""
+    from app.services.payment_service import admin_approve_deposit
+    try:
+        did = uuid.UUID(deposit_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid deposit_id")
+
+    admin_id = uuid.uuid4()  # Replace with get_current_admin().id when wired
+    deposit = await admin_approve_deposit(db, did, admin_id)
+    return {"message": "Deposit approved and wallet credited", "status": deposit.status.value}
+
+
+@router.get("/fee-config")
+async def get_fee_config(db: AsyncSession = Depends(get_session)):
+    from app.services.fee_service import fee_service
+    config = await fee_service.get_fee_config(db)
+    return config
+
+
+@router.put("/fee-config")
+async def update_fee_config(
+    req: Request,
+    db: AsyncSession = Depends(get_session),
+):
+    from app.services.fee_service import fee_service
+    config = await fee_service.get_fee_config(db)
+    try:
+        body = await req.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid JSON body")
+
+    for k, v in body.items():
+        if hasattr(config, k):
+            setattr(config, k, v)
+
+    config.updated_at = datetime.now(timezone.utc)
+    db.add(config)
+    await db.commit()
+    await db.refresh(config)
+    return config
+
+
+@router.get("/revenue")
+async def get_platform_revenue(
+    page: int = 1,
+    limit: int = 50,
+    event_type: Optional[str] = None,
+    db: AsyncSession = Depends(get_session),
+):
+    from sqlmodel import select, func
+    from app.models.admin import PlatformRevenueLog
+    from app.models.user import Users
+
+    # 1. Total revenue stats
+    # All time
+    all_time_stmt = select(func.sum(PlatformRevenueLog.fee_amount_cents))
+    all_time_res = await db.execute(all_time_stmt)
+    total_all_time = all_time_res.scalar() or 0
+
+    # This month
+    now = datetime.now(timezone.utc)
+    start_of_month = datetime(now.year, now.month, 1, tzinfo=timezone.utc)
+    month_stmt = select(func.sum(PlatformRevenueLog.fee_amount_cents)).where(PlatformRevenueLog.created_at >= start_of_month)
+    month_res = await db.execute(month_stmt)
+    total_this_month = month_res.scalar() or 0
+
+    # Today
+    start_of_today = datetime(now.year, now.month, now.day, tzinfo=timezone.utc)
+    today_stmt = select(func.sum(PlatformRevenueLog.fee_amount_cents)).where(PlatformRevenueLog.created_at >= start_of_today)
+    today_res = await db.execute(today_stmt)
+    total_today = today_res.scalar() or 0
+
+    # 2. Get paginated revenue logs
+    stmt = select(PlatformRevenueLog)
+    if event_type:
+        stmt = stmt.where(PlatformRevenueLog.event_type == event_type)
+
+    total_count_res = await db.execute(select(func.count()).select_from(stmt.subquery()))
+    total_count = total_count_res.scalar() or 0
+
+    stmt = stmt.order_by(PlatformRevenueLog.created_at.desc()).offset((page - 1) * limit).limit(limit)
+    res = await db.execute(stmt)
+    logs = res.scalars().all()
+
+    rows = []
+    for log in logs:
+        user_res = await db.execute(select(Users).where(Users.id == log.user_id))
+        user = user_res.scalar_one_or_none()
+        rows.append({
+            "id": str(log.id),
+            "event_type": log.event_type,
+            "user_id": str(log.user_id),
+            "user_email": user.email if user else None,
+            "user_name": user.username if user else None,
+            "gross_amount_cents": log.gross_amount_cents,
+            "gross_amount": f"₦{log.gross_amount_cents / 100:,.2f}",
+            "fee_amount_cents": log.fee_amount_cents,
+            "fee_amount": f"₦{log.fee_amount_cents / 100:,.2f}",
+            "fee_type": log.fee_type,
+            "fee_value": log.fee_value,
+            "reference": log.reference,
+            "created_at": log.created_at.isoformat() if log.created_at else None,
+        })
+
+    return {
+        "revenue_logs": rows,
+        "total_count": total_count,
+        "page": page,
+        "limit": limit,
+        "stats": {
+            "total_all_time": total_all_time,
+            "total_this_month": total_this_month,
+            "total_today": total_today,
+            "total_all_time_formatted": f"₦{total_all_time / 100:,.2f}",
+            "total_this_month_formatted": f"₦{total_this_month / 100:,.2f}",
+            "total_today_formatted": f"₦{total_today / 100:,.2f}",
+        }
+    }
+

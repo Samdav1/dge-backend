@@ -5,10 +5,22 @@ from fastapi import HTTPException
 from app.models.kyc import KYC
 from app.schemas.kyc import KYCStatus, KYCRead, KYCCreate, KYCUpdate
 
-async def create_user_repo_kyc(db: AsyncSession, kyc_userid) ->KYCRead:
-    if not kyc_userid:
+async def create_user_repo_kyc(db: AsyncSession, kyc) ->KYCRead:
+    if not kyc:
         raise HTTPException(status_code=404, detail="User not found")
-    user_kyc = KYC(user_id=kyc_userid)
+        
+    statement = select(KYC).where(KYC.user_id == kyc.user_id)
+    result = await db.exec(statement)
+    existing_kyc = result.first()
+    
+    if existing_kyc:
+        kyc_dump = kyc.model_dump(exclude_unset=True)
+        for key, value in kyc_dump.items():
+            setattr(existing_kyc, key, value)
+        user_kyc = existing_kyc
+    else:
+        user_kyc = KYC(**kyc.model_dump())
+        
     try:
         db.add(user_kyc)
         await db.commit()
@@ -38,3 +50,11 @@ async def update_user_repo_kyc(db: AsyncSession, kyc_update: KYCUpdate, user_id 
             return kyc_refined
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"{str(e),}, Error in update_user_repo_kyc")
+
+async def get_user_kyc_repo(db: AsyncSession, user_id) -> KYCRead | None:
+    statement = select(KYC).where(KYC.user_id == user_id)
+    result = await db.exec(statement)
+    kyc_record = result.first()
+    if kyc_record:
+        return KYCRead.model_validate(kyc_record)
+    return None

@@ -1,7 +1,7 @@
 from starlette import status
 
 from app.db.session import get_session
-from app.schemas.portfolio import UserPortfolioRead, UserPortfolioCreate, UserPortfolioUpdate, PortfolioMediaRead, \
+from app.schemas.portfolio import UserPortfolioRead, UserPortfolioWithMediaRead, UserPortfolioCreate, UserPortfolioUpdate, PortfolioMediaRead, \
     PortfolioMediaUpdate
 from app.schemas.user import UserRead
 from app.dependencies.auth import get_current_user
@@ -9,7 +9,8 @@ from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.services import portfolio_service
-from app.services.portfolio_service import create_portfolio_service, update_portfolio_service
+from app.services.portfolio_service import create_portfolio_service, update_portfolio_service, \
+    get_user_portfolio_service
 
 router = APIRouter()
 
@@ -77,3 +78,30 @@ async def update_portfolio_media(
     except Exception as error:
         raise HTTPException(status_code= 500, detail=f"Error Updating Portfolio Media, {str(error)}")
     return updated_media
+
+@router.delete("/delete_portfolio_media/{media_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_portfolio_media(
+    media_id,
+    db: AsyncSession = Depends(get_session),
+    current_user: UserRead = Depends(get_current_user)
+    ):
+    await portfolio_service.delete_portfolio_media_service(
+        db=db,
+        media_id=media_id,
+        user_id=current_user.id
+    )
+    return None
+
+@router.get("/get_user_portfolio", response_model=UserPortfolioWithMediaRead)
+async def get_user_portfolio(db: AsyncSession = Depends(get_session), current_user: UserRead = Depends(get_current_user)):
+    """
+
+    :param db:
+    :param current_user:
+    """
+
+    if not current_user.id:
+        raise HTTPException(status_code=401, detail="Invalid credentials")
+    else:
+        user_portfolio = await get_user_portfolio_service(db, current_user.id)
+        return user_portfolio

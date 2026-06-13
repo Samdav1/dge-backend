@@ -1,17 +1,20 @@
+from typing import Union
+
 from fastapi import HTTPException
 from sqlalchemy.exc import SQLAlchemyError
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 from app.models.user import Users
-from app.schemas.user import UserCreate, UserLogin, UserToken
+from app.schemas.user import UserCreate, UserLogin, UserToken, UserGoogleCreate
 
 
-async def create_user(db: AsyncSession, user: UserCreate, password: str):
+async def create_user(db: AsyncSession, user: Union[UserCreate, UserGoogleCreate], password: str = None) -> Users:
     try:
         new_user = Users(
             username=user.username,
             email=user.email,
-            password=password
+            password=password,
+            google_auth=user.google_auth
         )
         db.add(new_user)
         await db.commit()
@@ -46,4 +49,18 @@ async def get_user_by_id(user_id, db: AsyncSession):
     user = result.first()
     if user is None:
         raise HTTPException(status_code=404, detail="User not found")
+    return user
+
+async def get_user_by_email(email: str, db: AsyncSession):
+    stmt = select(Users).where(Users.email == email)
+    result = await db.exec(stmt)
+    user = result.first()
+    if user is None:
+        return None
+    return user
+
+async def get_user_by_referral_code(referral_code: str, db: AsyncSession):
+    stmt = select(Users).where(Users.referral_code == referral_code)
+    result = await db.exec(stmt)
+    user = result.first()
     return user

@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 from typing import Optional
 
 from sqlmodel import SQLModel, Field, Column, ForeignKey, Relationship
-from sqlalchemy import Enum, BigInteger, Text, UUID
+from sqlalchemy import Enum, BigInteger, Text, UUID, DateTime
 import enum
 
 class NegotiationType(str, enum.Enum):
@@ -53,12 +53,12 @@ class PriceNegotiation(SQLModel, table=True):
     )
 
     created_at: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc),
-        nullable=False
+        sa_column=Column(DateTime(timezone=True), nullable=False),
+        default_factory=lambda: datetime.now(timezone.utc)
     )
     updated_at: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc),
-        nullable=False
+        sa_column=Column(DateTime(timezone=True), nullable=False),
+        default_factory=lambda: datetime.now(timezone.utc)
     )
 
     services: "Service" = Relationship(back_populates="negotiations")
@@ -66,3 +66,8 @@ class PriceNegotiation(SQLModel, table=True):
     receiver: "Users" = Relationship(back_populates="negotiations_incoming", sa_relationship_kwargs={"foreign_keys": "[PriceNegotiation.receiver_id]"})
     escrow: 'Escrow' = Relationship(back_populates="price_negotiation")
     notifications: list['Notification'] = Relationship(back_populates="price_negotiation")
+
+    posted_job_id: Optional[uuid.UUID] = Field(
+        sa_column=Column(UUID(as_uuid=True), ForeignKey("posted_jobs.id"), nullable=True, index=True)
+    )
+    posted_job: Optional["PostedJob"] = Relationship(back_populates="negotiations")

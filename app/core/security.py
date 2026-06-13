@@ -14,45 +14,102 @@ PUBLIC_KEY = Path("./../jwt_public.pem").read_text()
 REFRESH_PRIVATE_KEY = Path("./../jwt_refresh_private.pem").read_text()
 REFRESH_PUBLIC_KEY = Path("./../jwt_refresh_public.pem").read_text()
 
-
-
 load_dotenv()
 
 ALGORITHM = os.getenv("ALGORITHM")
 TOKEN_EXPIRATION_TIME = os.getenv("ACCESS_TOKEN_EXPIRE_MINUTE")
 LONG_TOKEN_EXPIRATION_TIME = os.getenv("REFRESH_TOKEN_EXPIRE_DAYS")
+EMAIL_TOKEN_EXPIRATION_TIME = os.getenv("EMAIL_TOKEN_EXPIRE_MINUTE")
 
-async def get_access_token(subject: str, data: Dict[str, Any] = None, expires_delta: timedelta = None ) -> str:
+
+async def get_access_token(subject: str, data: Dict[str, Any] = None, expires_delta: timedelta = None) -> str:
+    """
+
+    :param subject:
+    :param data:
+    :param expires_delta:
+    :return:
+    """
     to_encode = {"sub": subject}
     if data:
         to_encode.update(data)
-    expires = datetime.now(timezone.utc) +  (expires_delta or timedelta(minutes=int(TOKEN_EXPIRATION_TIME)))
+    expires = datetime.now(timezone.utc) + (expires_delta or timedelta(minutes=int(TOKEN_EXPIRATION_TIME)))
     to_encode.update({"exp": expires})
-    return jwt.encode (to_encode, PRIVATE_KEY, algorithm=ALGORITHM)
+    return jwt.encode(to_encode, PRIVATE_KEY, algorithm=ALGORITHM)
 
 
 async def decode_access_token(token: str, options: Dict[str, Any] = None) -> Dict[str, Any]:
+    """
+
+    :param token:
+    :param options:
+    :return:
+    """
     try:
         payload = jwt.decode(token, PUBLIC_KEY, algorithms=[ALGORITHM], options=options)
         return payload
     except JWTError as e:
         raise e
 
+
 async def get_refresh_token(subject: str, data: Dict[str, Any] = None, expires_delta: timedelta = None) -> str:
+    """
+
+    :param subject:
+    :param data:
+    :param expires_delta:
+    :return:
+    """
     to_encode = {"sub": subject}
     if data:
         to_encode.update(data)
     expires = datetime.now(timezone.utc) + (expires_delta or timedelta(minutes=int(LONG_TOKEN_EXPIRATION_TIME)))
     to_encode.update({"exp": expires})
-    return jwt.encode(to_encode,REFRESH_PRIVATE_KEY, algorithm=ALGORITHM)
+    return jwt.encode(to_encode, REFRESH_PRIVATE_KEY, algorithm=ALGORITHM)
+
 
 async def decode_refresh_token(token: str, options: Dict[str, Any] = None) -> Dict[str, Any]:
+    """
+
+    :param token:
+    :param options:
+    :return:
+    """
     try:
         payload = jwt.decode(token, REFRESH_PUBLIC_KEY, algorithms=[ALGORITHM], options=options)
         return payload
     except JWTError as e:
         raise e
 
+
+async def create_email_token(subject: str, data: Dict[str, Any] = None, expires_delta: timedelta = None) -> str:
+    """
+
+    :param subject:
+    :param data:
+    :param expires_delta:
+    :return:
+    """
+    to_encode = {"sub": subject}
+    if data:
+        to_encode.update(data)
+    expires = datetime.now(timezone.utc) + (expires_delta or timedelta(minutes=int(EMAIL_TOKEN_EXPIRATION_TIME)))
+    to_encode.update({"exp": expires})
+    return jwt.encode(to_encode, PRIVATE_KEY, algorithm=ALGORITHM)
+
+
+async def decode_email_token(token: str, options: Dict[str, Any] = None) -> Dict[str, Any]:
+    """
+
+    :param token:
+    :param options:
+    :return:
+    """
+    try:
+        payload = jwt.decode(token, PUBLIC_KEY, algorithms=[ALGORITHM], options=options)
+        return payload
+    except JWTError as e:
+        raise e
 
 # async def jwt_decorator(func):
 #     async def wrapper(*args, **kwargs):

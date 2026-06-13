@@ -11,8 +11,8 @@ async def create_user_wallet_repo(db: AsyncSession, credentials) -> WalletRead:
     if not credentials:
         raise HTTPException(detail="Missing user id", status_code=404)
     user_id = credentials
-    user_deposit_wallet = Wallet(user_id=user_id, wallet_type=WalletType.deposit)
-    user_earnings_wallet = Wallet(user_id=user_id, wallet_type=WalletType.earnings)
+    user_deposit_wallet = Wallet(user_id=user_id, wallet_type=WalletType.deposit, currency="NGN")
+    user_earnings_wallet = Wallet(user_id=user_id, wallet_type=WalletType.earnings, currency="NGN")
     try:
         db.add(user_deposit_wallet)
         db.add(user_earnings_wallet)
@@ -56,9 +56,6 @@ async def update_user_wallet_balance_repo(
     except HTTPException:
         raise
     except Exception as e:
-<<<<<<< Updated upstream
-        raise HTTPException(status_code=500, detail=f"Error updating wallet: {str(e)}")
-=======
         raise HTTPException(status_code=500, detail=f"Error updating wallet: {str(e)}")
 
 async def update_user_wallet_balance_repo_ext(
@@ -99,30 +96,3 @@ async def update_user_wallet_balance_repo_ext(
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error updating wallet: {str(e)}")
-
-
-async def get_user_wallet_repo(db: AsyncSession, credentials) -> list[WalletRead]:
-    """
-
-    :p
-    :
-    :param credentials:
-    """
-
-    user_wallet = []
-
-    if not credentials:
-        raise HTTPException(status_code=404, detail="Missing user id")
-
-    try:
-        stmt = select(Wallet).where(Wallet.user_id == credentials)
-        result = await db.exec(stmt)
-        payload = result.all()
-
-        for w in payload:
-            wallet = WalletRead.model_validate(w)
-            user_wallet.append(wallet)
-        return user_wallet
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error getting user wallet: {str(e)}")
->>>>>>> Stashed changes

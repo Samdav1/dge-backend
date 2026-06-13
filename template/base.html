@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="color-scheme" content="light dark">
+    <meta name="supported-color-schemes" content="light dark">
+    <title>{{ subject }}</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            color-scheme: light dark;
+            supported-color-schemes: light dark;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #f8f9fa;
+            color: #1e293b;
+        }
+        .wrapper {
+            width: 100%;
+            background-color: #f8f9fa;
+            padding: 40px 20px;
+            box-sizing: border-box;
+        }
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+            background-color: #ffffff;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.05), 0 8px 10px -6px rgba(0, 0, 0, 0.01);
+            border: 1px solid #f1f5f9;
+        }
+        .header {
+            background-color: #0f172a;
+            color: #ffffff;
+            padding: 40px 32px;
+            text-align: center;
+            border-bottom: 4px solid #C69C2E;
+        }
+        .logo {
+            font-size: 32px;
+            font-weight: 700;
+            color: #C69C2E;
+            margin: 0;
+            letter-spacing: -0.5px;
+            text-transform: uppercase;
+        }
+        .logo span {
+            color: #ffffff;
+        }
+        .content {
+            padding: 40px 32px;
+            line-height: 1.6;
+        }
+        .content h2 {
+            margin: 0 0 24px;
+            font-size: 24px;
+            font-weight: 700;
+            color: #0f172a;
+        }
+        .content p {
+            margin: 0 0 16px;
+            font-size: 16px;
+            color: #334155;
+        }
+        .content ul {
+            padding-left: 20px;
+            margin-bottom: 24px;
+            background-color: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            padding: 20px 20px 20px 40px;
+        }
+        .content li {
+            margin-bottom: 12px;
+            color: #334155;
+            font-size: 15px;
+        }
+        .content li:last-child {
+            margin-bottom: 0;
+        }
+        .cta-container {
+            text-align: center;
+            margin: 32px 0;
+        }
+        .cta-button {
+            display: inline-block;
+            background-color: #C69C2E;
+            color: #ffffff !important;
+            padding: 16px 32px;
+            text-decoration: none;
+            border-radius: 8px;
+            font-weight: 600;
+            font-size: 16px;
+            transition: all 0.2s ease-in-out;
+            box-shadow: 0 4px 6px -1px rgba(198, 156, 46, 0.2);
+        }
+        .cta-button:hover {
+            background-color: #b08b29;
+            transform: translateY(-2px);
+            box-shadow: 0 6px 12px -2px rgba(198, 156, 46, 0.3);
+        }
+        .footer {
+            background-color: #0f172a;
+            color: #94a3b8;
+            padding: 32px;
+            text-align: center;
+            font-size: 13px;
+        }
+        .footer p {
+            margin: 0 0 8px;
+        }
+        .footer a {
+            color: #C69C2E;
+            text-decoration: none;
+            font-weight: 600;
+        }
+        .footer a:hover {
+            text-decoration: underline;
+        }
+        
+        .divider {
+            height: 1px;
+            background-color: #e2e8f0;
+            margin: 32px 0;
+        }
+        
+        .details-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 24px;
+        }
+        .details-table th, .details-table td {
+            padding: 12px 0;
+            border-bottom: 1px solid #f1f5f9;
+            text-align: left;
+        }
+        .details-table th {
+            color: #64748b;
+            font-weight: 600;
+            font-size: 14px;
+            width: 40%;
+        }
+        .details-table td {
+            color: #0f172a;
+            font-weight: 600;
+            font-size: 15px;
+            text-align: right;
+        }
+
+        /* START: DARK MODE STYLES */
+        @media (prefers-color-scheme: dark) {
+            body, .wrapper {
+                background-color: #020617 !important;
+                color: #e2e8f0 !important;
+            }
+            .container {
+                background-color: #0f172a !important;
+                border-color: #1e293b !important;
+            }
+            .content h2 {
+                color: #ffffff !important;
+            }
+            .content p, .content li {
+                color: #cbd5e1 !important;
+            }
+            .content ul {
+                background-color: #1e293b !important;
+                border-color: #334155 !important;
+            }
+            .details-table td {
+                color: #f8fafc !important;
+            }
+            .details-table th {
+                color: #94a3b8 !important;
+            }
+            .details-table th, .details-table td {
+                border-bottom-color: #1e293b !important;
+            }
+            .divider {
+                background-color: #1e293b !important;
+            }
+            .footer {
+                border-top: 1px solid #1e293b !important;
+            }
+        }
+        /* END: DARK MODE STYLES */
+    </style>
+</head>
+<body>
+    <div class="wrapper">
+        <div class="container">
+            <div class="header">
+                <p class="logo">DGE <span>World</span></p>
+            </div>
+            <div class="content">
+                {% block content %}{% endblock %}
+                
+                <div class="divider"></div>
+                
+                <p style="font-size: 14px; color: #64748b;">If you have any questions or need assistance, our support team is always here to help.</p>
+                <p style="font-size: 14px; color: #64748b; margin-bottom: 0;">Best regards,<br><strong style="color: #0f172a;">The DGE World Team</strong></p>
+            </div>
+            <div class="footer">
+                <p>&copy; {{ current_year | default('2024') }} DGE World. All rights reserved.</p>
+                <p>Building a world centered on trust, unity, and unique experiences.</p>
+                <p style="margin-top: 16px;"><a href="#">Privacy Policy</a> &nbsp;|&nbsp; <a href="#">Terms of Service</a></p>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

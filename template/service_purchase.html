@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+
+{% block content %}
+{% if is_buyer %}
+<h2>Your Purchase is Confirmed! 🛒</h2>
+
+<p>Hi {{ name }},</p>
+
+<p>Thank you for your purchase! We've successfully processed your payment for the service listed below, and the funds have been safely moved to Escrow. The seller has been notified to begin work.</p>
+
+<table class="details-table">
+    <tr>
+        <th>Service Title</th>
+        <td>{{ service_title }}</td>
+    </tr>
+    <tr>
+        <th>Seller</th>
+        <td>{{ other_party }}</td>
+    </tr>
+    <tr>
+        <th>Amount Paid</th>
+        <td style="color: #0ea5e9;">{{ amount }}</td>
+    </tr>
+    <tr>
+        <th>Order ID</th>
+        <td>{{ order_id }}</td>
+    </tr>
+</table>
+
+<div class="cta-container">
+    <a href="{{ cta_link }}" class="cta-button">View Order Details</a>
+</div>
+
+{% else %}
+<h2>You Have a New Order! 🎉</h2>
+
+<p>Hi {{ name }},</p>
+
+<p>Great news! <strong>{{ other_party }}</strong> has just purchased your service. The funds have been secured in Escrow and you are clear to begin working on the project.</p>
+
+<table class="details-table">
+    <tr>
+        <th>Service Title</th>
+        <td>{{ service_title }}</td>
+    </tr>
+    <tr>
+        <th>Buyer</th>
+        <td>{{ other_party }}</td>
+    </tr>
+    <tr>
+        <th>Expected Earnings</th>
+        <td style="color: #10b981;">{{ amount }}</td>
+    </tr>
+    <tr>
+        <th>Order ID</th>
+        <td>{{ order_id }}</td>
+    </tr>
+</table>
+
+<p>Please review the buyer's requirements and communicate with them through the DGE World platform.</p>
+
+<div class="cta-container">
+    <a href="{{ cta_link }}" class="cta-button">View Order & Start Work</a>
+</div>
+{% endif %}
+{% endblock %}

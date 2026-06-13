@@ -1,22 +1,30 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, Form, File
 from app.dependencies.auth import get_current_user
 from app.db.session import get_session
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from app.schemas.kyc import KYCRead, KYCUpdate
-from app.services.kyc_service import create_user_kyc_service, update_user_service_kyc
+from app.schemas.kyc import KYCRead, KYCUpdate, KYCCreate, DocumentType, KYCStatus
+from app.services.kyc_service import create_user_kyc_service, update_user_service_kyc, get_user_kyc_service
 from app.schemas.user import UserRead
 
 router = APIRouter()
 
 @router.post('/create_user_kyc')
-async def create_user_kyc(db: AsyncSession = Depends(get_session), current_user: UserRead = Depends(get_current_user))->KYCRead:
+async def create_user_kyc(
+        verification_file: UploadFile = File(...),
+        id_type: DocumentType = Form(...),
+        id_value: str = Form(...),
+        db: AsyncSession = Depends(get_session),
+        current_user: UserRead = Depends(get_current_user)
+)->KYCRead:
+
     if not current_user.id:
         raise HTTPException(status_code=401, detail="Not authenticated")
     else:
         user_id = current_user.id
         try:
-            user_kyc = await create_user_kyc_service(db=db, user_id=user_id)
+            new_kyc = KYCCreate(id_document_type=id_type, id_document_value=id_value, user_id=user_id, status=KYCStatus.pending)
+            user_kyc = await create_user_kyc_service(db=db, kyc=new_kyc, identification_file=verification_file)
         except Exception as e:
             raise HTTPException(status_code=500, detail=f" {e}, Unable to create user kyc")
         return user_kyc
@@ -32,3 +40,12 @@ async def update_user_kyc(kyc_data: KYCUpdate, db: AsyncSession = Depends(get_se
             return kyc_updated_data
         except Exception as e:
             raise HTTPException(status_code=500, detail=f" {e}, Unable to update user kyc")
+
+@router.get('/get_user_kyc', response_model=KYCRead | None)
+async def get_user_kyc(db: AsyncSession = Depends(get_session), current_user: UserRead = Depends(get_current_user)):
+    if not current_user.id:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    try:
+        return await get_user_kyc_service(db, current_user.id)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f" {e}, Unable to fetch user kyc")

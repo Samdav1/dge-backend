@@ -1,9 +1,9 @@
 from app.repositories.portfolio_repo import create_portfolio_repo, update_portfolio_repo
-from app.schemas.portfolio import UserPortfolioRead, UserPortfolioCreate, UserPortfolioUpdate, PortfolioMediaUpdate
+from app.schemas.portfolio import UserPortfolioRead, UserPortfolioCreate, UserPortfolioUpdate, PortfolioMediaUpdate, UserPortfolioWithMediaRead
 import uuid
 from fastapi import UploadFile, HTTPException, status
 from sqlmodel.ext.asyncio.session import AsyncSession
-from app.dependencies.file_handler import save_avatar
+from app.dependencies.file_handler import save_portfolio_media
 from app.repositories import portfolio_repo
 from app.schemas.portfolio import PortfolioMediaCreate, PortfolioMediaRead
 
@@ -32,7 +32,7 @@ async def create_portfolio_media_service(
     await portfolio_repo.get_portfolio_by_id_and_owner(
         db=db, portfolio_id=portfolio_id, user_id=user_id
     )
-    s3_key = await save_avatar(file)
+    s3_key = await save_portfolio_media(file)
     file_size = file.size
 
     media_data = PortfolioMediaCreate(
@@ -49,7 +49,7 @@ async def create_portfolio_media_service(
 
 
 async def update_portfolio_media_service(db: AsyncSession, user_id, media_update: UploadFile) -> PortfolioMediaRead:
-    s3_key = await save_avatar(media_update)
+    s3_key = await save_portfolio_media(media_update)
     file_size = media_update.size
 
     media_data = PortfolioMediaUpdate(
@@ -62,3 +62,19 @@ async def update_portfolio_media_service(db: AsyncSession, user_id, media_update
         db=db, user_id=user_id, media_update=media_data
     )
     return PortfolioMediaRead.model_validate(updated_media)
+
+async def delete_portfolio_media_service(db: AsyncSession, *, media_id, user_id) -> bool:
+    return await portfolio_repo.delete_media_repo(db=db, media_id=media_id, user_id=user_id)
+
+async def get_user_portfolio_service(db: AsyncSession, user_id) -> UserPortfolioWithMediaRead:
+    """
+
+    :param db:
+    :param user_id:
+    """
+
+    if user_id:
+        portfolio= await portfolio_repo.get_portfolio_repo(db, user_id)
+        return portfolio
+    else:
+        raise HTTPException(status_code=404, detail="User not found")

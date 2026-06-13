@@ -2,7 +2,7 @@ from sqlalchemy.orm import selectinload
 
 from app.models import Users
 from app.schemas.portfolio import UserPortfolioRead, UserPortfolioCreate, UserPortfolioUpdate, PortfolioMediaCreate, \
-    PortfolioMediaRead, PortfolioMediaUpdate
+    PortfolioMediaRead, PortfolioMediaUpdate, UserPortfolioWithMediaRead
 from app.models.portfolio import UserPortfolio, PortfolioMedia
 from fastapi import HTTPException, status, UploadFile
 from sqlmodel.ext.asyncio.session import AsyncSession
@@ -44,7 +44,10 @@ async def update_portfolio_repo(portfolio_info: UserPortfolioUpdate, db:AsyncSes
 
     for key, value in portfolio_data.items():
         if hasattr(user_portfolio, key):
-            setattr(user_portfolio, key, value)
+            if key == "visibility":
+                setattr(user_portfolio, key, value)
+            else:
+                setattr(user_portfolio, key, str(value))
 
     try:
         db.add(user_portfolio)
@@ -68,7 +71,7 @@ async def get_portfolio_by_id_and_owner(db: AsyncSession, *, portfolio_id, user_
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Portfolio not found or you do not have permission to access it."
         )
-    refined_portfolio = UserPortfolioRead.model_validate(portfolio)
+    refined_portfolio = UserPortfolioWithMediaRead.model_validate(portfolio)
     return refined_portfolio
 
 async def create_media_repo(
@@ -118,3 +121,46 @@ async def update_media_repo(
         return refined_media
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Cannot Update Media: {str(e)}")
+
+async def delete_media_repo(db: AsyncSession, *, media_id, user_id) -> bool:
+    # First verify ownership through the portfolio
+    statement = select(PortfolioMedia).join(UserPortfolio).where(
+        PortfolioMedia.id == media_id,
+        UserPortfolio.user_id == user_id
+    )
+    result = await db.exec(statement)
+    db_media = result.first()
+
+    if not db_media:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Media not found or you do not have permission to delete it."
+        )
+
+    try:
+        await db.delete(db_media)
+        await db.commit()
+        return True
+    except Exception as e:
+        await db.rollback()
+        raise HTTPException(status_code=500, detail=f"Cannot Delete Media: {str(e)}")
+
+async def get_portfolio_repo(db: AsyncSession, user_id) -> UserPortfolioWithMediaRead:
+    """
+
+    :param db:
+    :param user_id:
+    :return:
+    """
+    statement = select(UserPortfolio).options(selectinload(UserPortfolio.media_files)).where(
+        UserPortfolio.user_id == user_id
+    )
+    result = await db.exec(statement)
+    portfolio = result.first()
+    if not portfolio:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Portfolio not found or you do not have permission to access it."
+        )
+    refined_portfolio = UserPortfolioWithMediaRead.model_validate(portfolio)
+    return refined_portfolio

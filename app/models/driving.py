@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime, timezone
 from typing import Optional
-from sqlalchemy import Column, String, Integer, TIMESTAMP, func, Float, DateTime, Boolean, Enum as SAEnum
+from sqlalchemy import Column, String, Integer, TIMESTAMP, func, Float, DateTime, Boolean
 from sqlmodel import SQLModel, Field, Relationship
 import enum
 
@@ -133,14 +133,10 @@ class DriverLocation(SQLModel, table=True):
 # ---------------------------------------------------------------------------
 
 class TripStatus(str, enum.Enum):
-    PENDING = "pending"               # Rider requested, waiting for driver to accept
-    EN_ROUTE = "en_route"             # Driver accepted, en-route to pickup
-    ARRIVED = "arrived"               # Driver arrived at pickup
-    AWAITING_CONFIRMATION = "awaiting_confirmation" # Driver started trip, waiting for rider
-    IN_PROGRESS = "in_progress"       # Trip officially started
-    ACTIVE = "active"                 # (Legacy) Driver accepted, en-route / trip in progress
-    COMPLETED = "completed"           # Trip finished, fare settled
-    CANCELLED = "cancelled"           # Rider or driver cancelled before completion
+    PENDING = "pending"       # Rider requested, waiting for driver to accept
+    ACTIVE = "active"         # Driver accepted, en-route / trip in progress
+    COMPLETED = "completed"   # Trip finished, fare settled
+    CANCELLED = "cancelled"   # Rider or driver cancelled before completion
 
 
 class Trip(SQLModel, table=True):

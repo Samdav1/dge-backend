@@ -116,7 +116,11 @@ class RedisLocationService:
                 sort="ASC",
                 count=limit,
                 withdist=True,
+<<<<<<< HEAD
                 withcoord=True,
+=======
+                withcoord=False,
+>>>>>>> save
             )
         except Exception:
             logger.exception("RedisLocationService.find_nearby_available: geosearch failed")
@@ -127,9 +131,14 @@ class RedisLocationService:
 
         results = []
         for item in raw:
+<<<<<<< HEAD
             # redis-py returns (member, dist, (lng, lat)) when withdist=True, withcoord=True
             member, dist, coord = item[0], item[1], item[2]
             lng, lat = coord
+=======
+            # redis-py returns (member, dist) when withdist=True, withcoord=False
+            member, dist = item[0], item[1]
+>>>>>>> save
             sid = member.decode() if isinstance(member, bytes) else str(member)
 
             # Check availability flag
@@ -141,12 +150,16 @@ class RedisLocationService:
             if avail_val != "1":
                 continue
 
+<<<<<<< HEAD
             results.append({
                 "driver_id": sid, 
                 "distance_km": round(float(dist), 3),
                 "lat": float(lat),
                 "lng": float(lng)
             })
+=======
+            results.append({"driver_id": sid, "distance_km": round(float(dist), 3)})
+>>>>>>> save
 
         return results
 

@@ -1,5 +1,7 @@
 import uuid
 from datetime import datetime, timezone
+
+from sqlalchemy import Column, DateTime
 from sqlmodel import SQLModel, Field, Relationship
 from typing import Optional, List
 from enum import Enum
@@ -12,8 +14,8 @@ class TeamMembership(SQLModel, table=True):
     team_id: uuid.UUID = Field(foreign_key="teams.id", primary_key=True)
     user_id: uuid.UUID = Field(foreign_key="teamusers.id", primary_key=True)
     joined_at: datetime = Field(
+        sa_column=Column(DateTime(timezone=True), nullable=False),
         default_factory=lambda: datetime.now(timezone.utc),
-        nullable=False
     )
 
 
@@ -28,15 +30,16 @@ class TeamUsers(SQLModel, table=True):
     is_superuser: bool = Field(default=False, nullable=False)
     status: UserStatus = Field(default=UserStatus.active, nullable=False)
     created_at: datetime = Field(
+        sa_column=Column(DateTime(timezone=True), nullable=False),
         default_factory=lambda: datetime.now(timezone.utc),
-        nullable=False
     )
+    role_id: Optional[uuid.UUID] = Field(default=None, foreign_key="roles.id")
 
     teams: List["Teams"] = Relationship(
         back_populates="users", link_model=TeamMembership
     )
     permissions: List["Permissions"] = Relationship(back_populates="team_user")
-    role: "Roles" = Relationship(back_populates="team_user")
+    role: Optional["Roles"] = Relationship(back_populates="team_users")
     assigned_tickets: list["SupportTicket"] = Relationship(back_populates="assigned_team_user")
     ticket_replies: list["SupportTicketReply"] = Relationship(back_populates="author_team_user")
     team_user: list["KYC"] = Relationship(back_populates="reviewed_by")
@@ -62,12 +65,12 @@ class Teams(SQLModel, table=True):
         default=TeamType.customer_service, nullable=False
     )
     created_at: datetime = Field(
+        sa_column=Column(DateTime(timezone=True),  nullable=False),
         default_factory=lambda: datetime.now(timezone.utc),
-        nullable=False
     )
     updated_at: datetime = Field(
+        sa_column=Column(DateTime(timezone=True), nullable=False),
         default_factory=lambda: datetime.now(timezone.utc),
-        nullable=False
     )
 
     users: List[TeamUsers] = Relationship(

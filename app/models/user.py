@@ -8,6 +8,7 @@ from sqlalchemy import Column, DateTime
 from sqlmodel import SQLModel, Field, Relationship
 from enum import Enum
 
+
 class UserStatus(str, Enum):
     active = "active"
     inactive = "inactive"
@@ -26,7 +27,7 @@ def generate_referral_code(length=12):
 class Users(SQLModel, table=True):
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     email: str = Field(nullable=False, unique=True, index=True)
-    password: str = Field(nullable=False)
+    password: str = Field(nullable=True)
     username: str = Field(nullable=False, unique=True, index=True)
     status: UserStatus = Field(default=UserStatus.active, nullable=False)
     referral_code: str = Field(
@@ -35,6 +36,11 @@ class Users(SQLModel, table=True):
         index=True,
         nullable=False
     )
+    email_verified: bool = Field(default=False, nullable=False, sa_column_kwargs={"server_default": "false"})
+    phone_verified: bool = Field(default=False, nullable=False, sa_column_kwargs={"server_default": "false"})
+    mfa: bool = Field(default=False, nullable=True, sa_column_kwargs={"server_default": "false"})
+    mfa_code: str = Field(default=None, nullable=True, sa_column_kwargs={"server_default": "null"})
+    google_auth: bool = Field(default=False, nullable=True, sa_column_kwargs={"server_default": "false"})
     referred_by_id: Optional[uuid.UUID] = Field(default=None, foreign_key="users.id")
 
     referrer: Optional["Users"] = Relationship(
@@ -52,7 +58,7 @@ class Users(SQLModel, table=True):
     )
     locations: list["Locations"] = Relationship(back_populates="user")
     profile: 'Profile' = Relationship(back_populates='user')
-    wallet : 'Wallet' = Relationship(back_populates='user')
+    wallet : list['Wallet'] = Relationship(back_populates='user')
     transactions: list["Transaction"] = Relationship(back_populates="user")
     portfolios: list["UserPortfolio"] = Relationship(back_populates="user")
     reviews: list["Review"] = Relationship(back_populates="user")
@@ -66,6 +72,7 @@ class Users(SQLModel, table=True):
     call_participations: "CallParticipant" = Relationship(back_populates="users")
     kyc: "KYC" = Relationship(back_populates="user")
     services : list["Service"] = Relationship(back_populates="user")
+    driver_profile: 'DriverProfile' = Relationship(back_populates="user")
     negotiations_outgoing: list["PriceNegotiation"] = Relationship(
         back_populates="initiator",
         sa_relationship_kwargs={"foreign_keys": "[PriceNegotiation.initiator_id]"}
@@ -84,6 +91,9 @@ class Users(SQLModel, table=True):
         sa_relationship_kwargs={"foreign_keys": "[Notification.actor_id]"}
     )
     refresh_tokens: list["RefreshToken"] = Relationship(back_populates="user")
+    submissions: list["WorkSubmission"] = Relationship(back_populates="user")
+    posted_jobs: list["PostedJob"] = Relationship(back_populates="user")
+
 
 
 class Locations(SQLModel, table=True):
@@ -92,7 +102,10 @@ class Locations(SQLModel, table=True):
     location_type: LocationType = Field(nullable=False)
     lat: float = Field(nullable=False)
     lon: float = Field(nullable=False)
-    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), nullable=False)
+    updated_at: datetime = Field(
+        sa_column=Column(DateTime(timezone=True), nullable=False),
+        default_factory=lambda: datetime.now(timezone.utc),
+    )
     accuracy_meter: float = Field(nullable=False)
     user: Users = Relationship(back_populates="locations")
 
@@ -116,5 +129,9 @@ class RefreshToken(SQLModel, table=True):
         default_factory=lambda: datetime.now(timezone.utc),
     )
     revoked: bool = Field(default=False, nullable=False)
+    revoked_at: Optional[datetime] = Field(
+        sa_column=Column(DateTime(timezone=True), nullable=True),
+        default=None
+    )
 
     user: "Users" = Relationship(back_populates="refresh_tokens")
