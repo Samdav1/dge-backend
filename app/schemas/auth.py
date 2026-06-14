@@ -1,14 +1,11 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 class GoogleCallBack(BaseModel):
     id_token: str
 
-    class Config:
-        from_attributes = True
-
+    model_config = ConfigDict(from_attributes=True)
 class ChangeUserPass(BaseModel):
     password: str
     token: str
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)

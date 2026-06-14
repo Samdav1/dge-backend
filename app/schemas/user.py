@@ -1,4 +1,4 @@
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, ConfigDict
 from typing import Optional, TYPE_CHECKING
 from enum import Enum
 import uuid
@@ -18,34 +18,25 @@ class UserBase(BaseModel):
     username: str
     email: EmailStr
 
-    class Config:
-        from_attributes = True
-
-
+    model_config = ConfigDict(from_attributes=True)
 class UserLogin(BaseModel):
     username: str
     password: str
 
-    class Config:
-        from_attributes = True
-
+    model_config = ConfigDict(from_attributes=True)
 class UserCreate(UserBase):
     password: str
     referral_code: Optional[str]
     google_auth: bool = False
 
-    class Config:
-        from_attributes = True
-
+    model_config = ConfigDict(from_attributes=True)
 class UserRead(UserBase):
     id: uuid.UUID
     status: UserStatus
     referral_code: Optional[str]
     is_admin: bool = False
 
-    class Config:
-        from_attributes = True
-
+    model_config = ConfigDict(from_attributes=True)
 class UserReadWithProfile(UserRead):
     profile: Optional["ProfileRead"]
 
@@ -60,5 +51,4 @@ class UserGoogleCreate(UserBase):
     referral_code: Optional[str]
     google_auth: bool = True
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)

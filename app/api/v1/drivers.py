@@ -42,7 +42,7 @@ from app.schemas.driving import (
     RideCreate, RideRead, RideComplete,
     DriverNearbyResponse, LocationUpdate, LocationPing,
     TripRequest, TripRead, TripAccept, TripCancel, TripComplete,
-    FareEstimateResponse,
+    FareEstimateResponse, TripReviewCreate, TripCounter,
 )
 from app.schemas.user import UserRead
 from app.services.driving_service import DriverService, RideService, LocationService
@@ -207,6 +207,35 @@ async def get_drivers_nearby(
         user_record = await db.get(Users, profile.user_id) if profile else None
         driver_name = user_record.username if user_record else "Driver"
         car_name = f"{profile.car_name} {profile.car_model}" if profile else ""
+        # Get driver average rating from reviews
+        rating = 5.0
+        if profile:
+            from app.models.portfolio import UserPortfolio, Review
+            from sqlmodel import select, func
+            portfolio_res = await db.execute(
+                select(UserPortfolio).where(UserPortfolio.user_id == profile.user_id)
+            )
+            portfolio = portfolio_res.scalars().first()
+            if portfolio:
+                avg_rating_res = await db.execute(
+                    select(func.avg(Review.rating)).where(Review.portfolio_id == portfolio.id)
+                )
+                avg_val = avg_rating_res.scalar()
+                if avg_val is not None:
+                    rating = float(avg_val)
+
+        # Get driver personal profile for avatar
+        driver_avatar = None
+        if profile:
+            from app.models.profile import Profile
+            from sqlmodel import select
+            personal_prof_res = await db.execute(
+                select(Profile).where(Profile.user_id == profile.user_id)
+            )
+            personal_prof = personal_prof_res.scalars().first()
+            if personal_prof:
+                driver_avatar = personal_prof.avatar_url
+
         response.append(
             DriverNearbyResponse(
                 driver_id=d_id,
@@ -215,6 +244,8 @@ async def get_drivers_nearby(
                 distance_km=d["distance_km"],
                 car_name=car_name,
                 driver_name=driver_name,
+                rating=rating,
+                driver_avatar=driver_avatar,
             )
         )
     return response
@@ -363,6 +394,65 @@ async def accept_trip(
 
 
 @router.post(
+    "/trips/{trip_id}/counter",
+    response_model=TripRead,
+    summary="Driver: Propose a counter-offer price for the ride",
+)
+async def counter_trip(
+    trip_id: uuid.UUID,
+    payload: TripCounter,
+    current_user: UserRead = Depends(get_current_user),
+    driver_service: DriverService = Depends(get_driver_service),
+    matching: MatchingService = Depends(get_matching_service),
+):
+    try:
+        driver_profile = await driver_service.get_driver_profile(current_user.id)
+        trip = await matching.counter_offer(
+            driver_id=driver_profile.id,
+            trip_id=trip_id,
+            counter_fare=payload.counter_fare
+        )
+        trip_read = TripRead.model_validate(trip)
+        trip_read.driver_user_id = driver_profile.user_id
+        return trip_read
+    except PermissionError as e:
+        raise HTTPException(status_code=403, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Internal error: {str(e)}")
+
+
+@router.post(
+    "/trips/{trip_id}/accept_counter",
+    response_model=TripRead,
+    summary="Rider: Accept the driver's counter-offer price",
+)
+async def accept_counter(
+    trip_id: uuid.UUID,
+    current_user: UserRead = Depends(get_current_user),
+    matching: MatchingService = Depends(get_matching_service),
+    db: AsyncSession = Depends(get_session),
+):
+    try:
+        trip = await matching.accept_counter(rider_id=current_user.id, trip_id=trip_id)
+        trip_read = TripRead.model_validate(trip)
+        if trip.driver_id:
+            from app.repositories.driving import DriverRepository
+            driver_repo = DriverRepository(db)
+            driver_profile = await driver_repo.get_by_id(trip.driver_id)
+            if driver_profile:
+                trip_read.driver_user_id = driver_profile.user_id
+        return trip_read
+    except PermissionError as e:
+        raise HTTPException(status_code=403, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Internal error: {str(e)}")
+
+
+@router.post(
     "/trips/{trip_id}/arrive",
     response_model=TripRead,
     summary="Driver: Mark as arrived at pickup",
@@ -451,6 +541,7 @@ async def cancel_trip(
     payload: Optional[TripCancel] = None,
     current_user: UserRead = Depends(get_current_user),
     matching: MatchingService = Depends(get_matching_service),
+    driver_service: DriverService = Depends(get_driver_service),
 ):
     """
     Cancel a PENDING or ACTIVE trip.
@@ -464,7 +555,14 @@ async def cancel_trip(
             cancelled_by_id=current_user.id,
             reason=reason,
         )
-        return trip
+        trip_read = TripRead.model_validate(trip)
+        if trip.driver_id:
+            try:
+                profile = await driver_service.get_driver_profile_by_id(trip.driver_id)
+                trip_read.driver_user_id = profile.user_id
+            except Exception:
+                pass
+        return trip_read
     except PermissionError as e:
         raise HTTPException(status_code=403, detail=str(e))
     except ValueError as e:
@@ -498,7 +596,9 @@ async def complete_trip(
             trip_id=trip_id,
             final_fare=final_fare,
         )
-        return trip
+        trip_read = TripRead.model_validate(trip)
+        trip_read.driver_user_id = driver_profile.user_id
+        return trip_read
     except PermissionError as e:
         raise HTTPException(status_code=403, detail=str(e))
     except ValueError as e:
@@ -597,12 +697,218 @@ async def get_trip(
     trip_id: uuid.UUID,
     current_user: UserRead = Depends(get_current_user),
     repo: TripRepository = Depends(get_trip_repo),
+    driver_service: DriverService = Depends(get_driver_service),
 ):
     """Fetch a trip by ID. Returns 404 if not found or 403 if the user is not a party."""
     trip = await repo.get_by_id(trip_id)
     if not trip:
         raise HTTPException(status_code=404, detail="Trip not found")
+
+    driver_profile_id = None
+    try:
+        driver_profile = await driver_service.get_driver_profile(current_user.id)
+        if driver_profile:
+            driver_profile_id = driver_profile.id
+    except Exception:
+        pass
+
     # Only rider or the assigned driver can view the trip
-    if trip.rider_id != current_user.id and trip.driver_id != current_user.id:
+    if trip.rider_id != current_user.id and (trip.driver_id is None or trip.driver_id != driver_profile_id):
         raise HTTPException(status_code=403, detail="You are not a party to this trip")
-    return trip
+
+    trip_read = TripRead.model_validate(trip)
+    if trip.driver_id:
+        try:
+            profile = await driver_service.get_driver_profile_by_id(trip.driver_id)
+            trip_read.driver_user_id = profile.user_id
+        except Exception:
+            pass
+    return trip_read
+
+
+@router.post("/trips/{trip_id}/review", status_code=status.HTTP_201_CREATED)
+async def review_trip(
+    trip_id: uuid.UUID,
+    payload: TripReviewCreate,
+    current_user: UserRead = Depends(get_current_user),
+    db: AsyncSession = Depends(get_session)
+):
+    """
+    Rider: Submit a review and rating for a completed trip.
+    This creates/updates the driver's public portfolio and saves the review.
+    """
+    from sqlmodel import select
+    from app.models.driving import Trip, DriverProfile
+    from app.models.portfolio import UserPortfolio, PortfolioVisibility, Review
+
+    trip = await db.get(Trip, trip_id)
+    if not trip:
+        raise HTTPException(status_code=404, detail="Trip not found")
+
+    if trip.rider_id != current_user.id:
+        raise HTTPException(status_code=403, detail="You can only review trips you took")
+
+    if not trip.driver_id:
+        raise HTTPException(status_code=400, detail="This trip has no driver")
+
+    driver_profile = await db.get(DriverProfile, trip.driver_id)
+    if not driver_profile:
+        raise HTTPException(status_code=404, detail="Driver profile not found")
+
+    driver_user_id = driver_profile.user_id
+
+    # Find or create UserPortfolio for the driver
+    portfolio_res = await db.execute(
+        select(UserPortfolio).where(UserPortfolio.user_id == driver_user_id)
+    )
+    portfolio = portfolio_res.scalars().first()
+    if not portfolio:
+        # Get driver username to make a nice title
+        from app.models.user import Users
+        driver_user = await db.get(Users, driver_user_id)
+        driver_username = driver_user.username if driver_user else "Driver"
+        portfolio = UserPortfolio(
+            user_id=driver_user_id,
+            title=f"{driver_username}'s Service Portfolio",
+            description="Driver's public ride-hailing services portfolio",
+            visibility=PortfolioVisibility.public
+        )
+        db.add(portfolio)
+        await db.commit()
+        await db.refresh(portfolio)
+
+    # Save the review
+    new_review = Review(
+        user_id=current_user.id,
+        portfolio_id=portfolio.id,
+        rating=payload.rating,
+        comment=payload.comment
+    )
+    db.add(new_review)
+    await db.commit()
+    await db.refresh(new_review)
+
+    return {"status": "success", "review_id": str(new_review.id)}
+
+
+@router.get("/{driver_id}/public-profile")
+async def get_driver_public_profile(
+    driver_id: uuid.UUID,
+    db: AsyncSession = Depends(get_session)
+):
+    """
+    Get public details of a driver, including completed trips and all reviews received over time.
+    """
+    from sqlmodel import select
+    from app.models.driving import DriverProfile, Trip, TripStatus
+    from app.models.user import Users
+    from app.models.profile import Profile
+    from app.models.portfolio import UserPortfolio, Review
+
+    driver_profile = await db.get(DriverProfile, driver_id)
+    if not driver_profile:
+        raise HTTPException(status_code=404, detail="Driver not found")
+
+    # Fetch User & Profile
+    driver_user = await db.get(Users, driver_profile.user_id)
+    if not driver_user:
+        raise HTTPException(status_code=404, detail="Driver user account not found")
+
+    profile_res = await db.execute(select(Profile).where(Profile.user_id == driver_profile.user_id))
+    driver_personal_profile = profile_res.scalars().first()
+
+    driver_name = driver_personal_profile.first_name + " " + driver_personal_profile.last_name if (driver_personal_profile and driver_personal_profile.first_name) else driver_user.username
+    driver_avatar = driver_personal_profile.avatar_url if driver_personal_profile else None
+
+    # Fetch completed trips
+    trips_res = await db.execute(
+        select(Trip).where(Trip.driver_id == driver_id, Trip.status == TripStatus.COMPLETED).order_by(Trip.completed_at.desc())
+    )
+    completed_trips = trips_res.scalars().all()
+
+    # Calculate stats dynamically
+    successful_rides_count = len(completed_trips)
+    
+    total_rides_res = await db.execute(
+        select(Trip).where(Trip.driver_id == driver_id)
+    )
+    total_rides_count = len(total_rides_res.scalars().all())
+    
+    # Update driver profile columns if they differ
+    if driver_profile.successful_rides != successful_rides_count or driver_profile.total_rides != total_rides_count:
+        driver_profile.successful_rides = successful_rides_count
+        driver_profile.total_rides = total_rides_count
+        
+        # Check rank upgrade logic
+        from app.models.driving import DriverRank
+        from app.services.driving_service import RANK_THRESHOLDS
+        
+        new_rank = DriverRank.STARTER
+        for rank, threshold in RANK_THRESHOLDS.items():
+            if successful_rides_count >= threshold:
+                new_rank = rank
+                break
+        driver_profile.rank = new_rank
+        
+        db.add(driver_profile)
+        await db.commit()
+        await db.refresh(driver_profile)
+
+    # Fetch reviews via UserPortfolio
+    portfolio_res = await db.execute(
+        select(UserPortfolio).where(UserPortfolio.user_id == driver_profile.user_id)
+    )
+    portfolio = portfolio_res.scalars().first()
+
+    reviews_list = []
+    if portfolio:
+        reviews_res = await db.execute(
+            select(Review).where(Review.portfolio_id == portfolio.id).order_by(Review.created_at.desc())
+        )
+        reviews = reviews_res.scalars().all()
+
+        for r in reviews:
+            # Get reviewer's details
+            reviewer_user = await db.get(Users, r.user_id)
+            reviewer_name = reviewer_user.username if reviewer_user else "Anonymous"
+            reviewer_avatar = None
+            if reviewer_user:
+                rev_prof_res = await db.execute(select(Profile).where(Profile.user_id == reviewer_user.id))
+                rev_prof = rev_prof_res.scalars().first()
+                if rev_prof:
+                    if rev_prof.first_name:
+                        reviewer_name = f"{rev_prof.first_name} {rev_prof.last_name or ''}".strip()
+                    reviewer_avatar = rev_prof.avatar_url
+
+            reviews_list.append({
+                "id": str(r.id),
+                "reviewer_name": reviewer_name,
+                "reviewer_avatar": reviewer_avatar,
+                "rating": r.rating,
+                "comment": r.comment,
+                "created_at": r.created_at.isoformat()
+            })
+
+    # Prepare response
+    return {
+        "driver_id": str(driver_id),
+        "driver_name": driver_name,
+        "driver_avatar": driver_avatar,
+        "car_name": driver_profile.car_name,
+        "car_model": driver_profile.car_model,
+        "plate_number": driver_profile.plate_number,
+        "successful_rides": driver_profile.successful_rides,
+        "total_rides": driver_profile.total_rides,
+        "rank": driver_profile.rank.value,
+        "reviews": reviews_list,
+        "completed_trips": [
+            {
+                "id": str(t.id),
+                "pickup_address": t.pickup_address,
+                "dropoff_address": t.dropoff_address,
+                "completed_at": t.completed_at.isoformat() if t.completed_at else None,
+                "distance_km": t.distance_km
+            }
+            for t in completed_trips
+        ]
+    }

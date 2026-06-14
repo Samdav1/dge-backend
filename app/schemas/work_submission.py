@@ -3,7 +3,7 @@ from datetime import datetime
 from typing import List, Optional
 from uuid import UUID
 from fastapi import Form
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from fastapi import Form
 
 class WorkSubmissionCreate(BaseModel):
@@ -58,5 +58,4 @@ class WorkSubmissionRead(BaseModel):
     created_at: datetime
     service: Optional[ServiceRead] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)

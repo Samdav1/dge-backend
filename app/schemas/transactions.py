@@ -1,5 +1,5 @@
 # app/schemas/transactions_repo.py
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 from typing import Optional
 from datetime import datetime
 from uuid import UUID
@@ -24,10 +24,7 @@ class TransactionRead(TransactionBase):
     status: TxnStatus
     reference: Optional[str] = None
 
-    class Config:
-        from_attributes = True
-
-
+    model_config = ConfigDict(from_attributes=True)
 class TransactionUpdate(BaseModel):
     status: Optional[TxnStatus] = None
     reference: Optional[str] = None

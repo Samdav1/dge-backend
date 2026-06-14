@@ -1,7 +1,7 @@
 from typing import Optional, Dict, Any, List
 from datetime import datetime
 from uuid import UUID
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from app.models.support_ticket import SupportTicketStatus, SupportTicketPriority
 
 
@@ -34,10 +34,7 @@ class SupportTicketRead(SupportTicketBase):
     assigned_admin_id: Optional[UUID] = None
     user_name: Optional[str] = None
 
-    class Config:
-        from_attributes = True
-
-
+    model_config = ConfigDict(from_attributes=True)
 class SupportTicketReplyBase(BaseModel):
     message: str
     attachments: Dict[str, Any] = {}
@@ -57,5 +54,4 @@ class SupportTicketReplyRead(SupportTicketReplyBase):
     author_admin_id: Optional[UUID] = None
     author_name: Optional[str] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)

@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h2>{{ subject }}</h2>
+
+<p>Hi {{ name }},</p>
+
+<p>{{ message }}</p>
+
+<table class="details-table">
+    <tr>
+        <th>Trip Activity</th>
+        <td>{{ service_title }}</td>
+    </tr>
+    <tr>
+        <th>Participant</th>
+        <td>{{ provider_name }}</td>
+    </tr>
+    <tr>
+        <th>Total Fare</th>
+        <td style="color: #ef4444;">{{ price }}</td>
+    </tr>
+</table>
+
+<div class="cta-container">
+    <a href="{{ cta_link }}" class="cta-button">View Dashboard</a>
+</div>
+{% endblock %}

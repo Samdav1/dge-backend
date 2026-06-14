@@ -1,5 +1,5 @@
 
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, ConfigDict
 from typing import Optional, List
 from uuid import UUID
 from datetime import datetime
@@ -21,10 +21,7 @@ class TeamRead(TeamBase):
     created_at: datetime
     updated_at: datetime
 
-    class Config:
-        from_attributes = True
-
-
+    model_config = ConfigDict(from_attributes=True)
 class TeamUpdate(BaseModel):
     name: Optional[str] = None
     description: Optional[str] = None
@@ -47,10 +44,7 @@ class TeamUserRead(TeamUserBase):
     id: UUID
     created_at: datetime
 
-    class Config:
-        from_attributes = True
-
-
+    model_config = ConfigDict(from_attributes=True)
 class TeamUserUpdate(BaseModel):
     full_name: Optional[str] = None
     phone: Optional[str] = None
@@ -69,5 +63,4 @@ class TeamMembershipCreate(TeamMembershipBase):
 class TeamMembershipRead(TeamMembershipBase):
     joined_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)

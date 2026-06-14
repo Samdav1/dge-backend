@@ -131,24 +131,13 @@ class MatchingService:
             raise ValueError("Matched driver profile not found in database.")
 
         # 4. Pricing engine
-        if negotiated_fare is not None:
-            # Direct negotiation overrides calculated fare
-            fare_obj = calculate_trip_fare(
-                pickup_lat=pickup_lat,
-                pickup_lng=pickup_lng,
-                dropoff_lat=dropoff_lat,
-                dropoff_lng=dropoff_lng,
-            )
-            fare_obj.estimated_fare = negotiated_fare
-            fare = fare_obj
-        else:
-            fare = calculate_trip_fare(
-                pickup_lat=pickup_lat,
-                pickup_lng=pickup_lng,
-                dropoff_lat=dropoff_lat,
-                dropoff_lng=dropoff_lng,
-                surge_multiplier=surge_multiplier,
-            )
+        fare = calculate_trip_fare(
+            pickup_lat=pickup_lat,
+            pickup_lng=pickup_lng,
+            dropoff_lat=dropoff_lat,
+            dropoff_lng=dropoff_lng,
+            surge_multiplier=surge_multiplier,
+        )
 
         # 5. Persist Trip record (PENDING — no driver linked yet until acceptance)
         trip = Trip(
@@ -162,6 +151,7 @@ class MatchingService:
             dropoff_address=dropoff_address,
             distance_km=fare.distance_km,
             estimated_fare=fare.estimated_fare,
+            negotiated_fare=negotiated_fare,
             surge_multiplier=surge_multiplier,
             status=TripStatus.PENDING,
         )
@@ -304,6 +294,84 @@ class MatchingService:
         logger.info("Trip %s accepted by driver %s (EN_ROUTE)", trip_id, driver_id)
         return trip
 
+    async def counter_offer(self, driver_id: uuid.UUID, trip_id: uuid.UUID, counter_fare: float) -> Trip:
+        """
+        Called by POST /drivers/trips/{trip_id}/counter.
+        Updates trip.negotiated_fare with the driver's proposed counter-offer.
+        Notifies the rider via WebSocket.
+        """
+        trip = await self.trip_repo.get_by_id(trip_id)
+        if not trip:
+            raise ValueError("Trip not found.")
+        if trip.driver_id != driver_id:
+            raise PermissionError("This trip is not assigned to you.")
+        if trip.status != TripStatus.PENDING:
+            raise ValueError(f"Trip is not in pending status, cannot counter — current: {trip.status}")
+
+        trip.negotiated_fare = counter_fare
+        trip = await self.trip_repo.update(trip)
+
+        # Notify rider of the counter offer via WebSocket
+        payload = {
+            "type": "ride_counter_offer",
+            "trip_id": str(trip.id),
+            "counter_fare": counter_fare,
+        }
+        await self.manager.send_to_user(str(trip.rider_id), payload)
+        await self._publish_to_ride_channel(trip.id, payload)
+
+        logger.info("Trip %s countered by driver %s | new fare=%.2f", trip_id, driver_id, counter_fare)
+        return trip
+
+    async def accept_counter(self, rider_id: uuid.UUID, trip_id: uuid.UUID) -> Trip:
+        """
+        Called by POST /drivers/trips/{trip_id}/accept_counter.
+        Rider accepts the driver's counter-offer.
+        Transitions trip to EN_ROUTE and notifies both parties.
+        """
+        trip = await self.trip_repo.get_by_id(trip_id)
+        if not trip:
+            raise ValueError("Trip not found.")
+        if trip.rider_id != rider_id:
+            raise PermissionError("This trip does not belong to you.")
+        if trip.status != TripStatus.PENDING:
+            raise ValueError(f"Trip cannot be accepted — current status: {trip.status}")
+        if trip.negotiated_fare is None:
+            raise ValueError("No negotiation/counter offer exists on this trip.")
+
+        # Update the active fare with the accepted counter-offer fare
+        trip.estimated_fare = trip.negotiated_fare
+        trip.status = TripStatus.EN_ROUTE
+        trip.accepted_at = datetime.now(timezone.utc)
+        trip = await self.trip_repo.update(trip)
+
+        # Fetch driver profile to send details to rider
+        driver_profile = None
+        if trip.driver_id:
+            driver_profile = await self.driver_repo.get_by_id(trip.driver_id)
+
+        # Notify rider via WebSocket
+        payload = {
+            "type": "ride_accepted",
+            "trip_id": str(trip.id),
+            "driver": {
+                "driver_id": str(trip.driver_id) if trip.driver_id else "",
+                "car": f"{driver_profile.car_name} {driver_profile.car_model}"
+                if driver_profile else "Unknown",
+                "plate": driver_profile.plate_number if driver_profile else "",
+            },
+        }
+        await self.manager.send_to_user(str(trip.rider_id), payload)
+        
+        # Notify driver via WebSocket
+        if driver_profile:
+            await self.manager.send_to_user(str(driver_profile.user_id), payload)
+
+        await self._publish_to_ride_channel(trip.id, payload)
+
+        logger.info("Trip %s counter accepted by rider %s (EN_ROUTE)", trip_id, rider_id)
+        return trip
+
     async def arrive_at_pickup(self, driver_id: uuid.UUID, trip_id: uuid.UUID) -> Trip:
         trip = await self.trip_repo.get_by_id(trip_id)
         if not trip:
@@ -378,7 +446,12 @@ class MatchingService:
             raise ValueError("Trip not found.")
         if trip.status in (TripStatus.COMPLETED, TripStatus.CANCELLED):
             raise ValueError(f"Trip already in terminal state: {trip.status}")
-        if trip.rider_id != cancelled_by_id and trip.driver_id != cancelled_by_id:
+        from app.repositories.driving import DriverRepository
+        driver_repo = DriverRepository(self.session)
+        driver_profile = await driver_repo.get_by_user_id(cancelled_by_id)
+        driver_profile_id = driver_profile.id if driver_profile else None
+
+        if trip.rider_id != cancelled_by_id and (trip.driver_id is None or trip.driver_id != driver_profile_id):
             raise PermissionError("You are not a party to this trip.")
 
         trip.status = TripStatus.CANCELLED
@@ -615,6 +688,7 @@ class MatchingService:
             },
             "distance_km": fare.distance_km,
             "estimated_fare": fare.estimated_fare,
+            "negotiated_fare": trip.negotiated_fare,
             "distance_to_pickup_km": distance_to_driver_km,
             "expires_in_seconds": ACCEPT_TIMEOUT_SECONDS,
         }

@@ -4,7 +4,7 @@ from typing import Optional
 from uuid import UUID
 from datetime import datetime
 from fastapi import Form, UploadFile
-from pydantic import BaseModel, EmailStr, Field, constr
+from pydantic import BaseModel, EmailStr, Field, constr, ConfigDict
 from app.models.admin import AdminRank, AdminStatus
 
 # basic validators
@@ -22,10 +22,7 @@ class SuperAdminBase(BaseModel):
     phone_verified: Optional[bool] = False
     mfa_enabled: Optional[bool] = False
 
-    class Config:
-        from_attributes = True
-
-
+    model_config = ConfigDict(from_attributes=True)
 # --- FORM schema (multipart data) ---
 class SuperAdminCreateForm:
     def __init__(
@@ -64,9 +61,7 @@ class SuperAdminRead(BaseModel):
     push_notifs: bool = True
     security_alerts: bool = False
 
-    class Config:
-        from_attributes = True
-
+    model_config = ConfigDict(from_attributes=True)
 class SuperAdminLoginRead(BaseModel):
     id: UUID
     name: str
@@ -82,12 +77,9 @@ class SuperAdminLoginRead(BaseModel):
     updated_at: Optional[datetime] = None
     last_login_at: Optional[datetime] = None
 
-    class Config:
-        from_attributes = True
-
+    model_config = ConfigDict(from_attributes=True)
 class AdminLogin(BaseModel):
     username: str
     password: str
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)

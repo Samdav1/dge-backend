@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 from typing import Optional, List
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 
 class ServiceCategoryBase(BaseModel):
@@ -24,10 +24,7 @@ class ServiceCategoryRead(ServiceCategoryBase):
     id: uuid.UUID
     created_at: datetime
 
-    class Config:
-        from_attributes = True
-
-
+    model_config = ConfigDict(from_attributes=True)
 # For linking services <-> categories
 class ServiceCategoryLinkCreate(BaseModel):
     service_id: uuid.UUID
@@ -38,5 +35,4 @@ class ServiceCategoryLinkRead(BaseModel):
     service_id: uuid.UUID
     category_id: uuid.UUID
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)

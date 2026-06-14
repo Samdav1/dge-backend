@@ -12,4 +12,5 @@ async def main():
         for t in tokens:
             print(t.token[:20], t.expires_at, t.revoked)
 
-asyncio.run(main())
+if __name__ == "__main__":
+    asyncio.run(main())

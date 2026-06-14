@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 from typing import Optional, List, Dict
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from enum import Enum
 
 
@@ -27,11 +27,7 @@ class ConversationParticipantRead(ConversationParticipantBase):
     joined_at: datetime
     left_at: Optional[datetime] = None
 
-    class Config:
-        from_attributes = True
-
-
-
+    model_config = ConfigDict(from_attributes=True)
 class ConversationBase(BaseModel):
     title: Optional[str] = None
     type: ConversationType
@@ -56,5 +52,4 @@ class ConversationRead(ConversationBase):
     # ✅ nested relationships
     # participants: List[ConversationParticipantRead] = []
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)

@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Optional
 from uuid import UUID
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 from enum import Enum
 
 
@@ -36,10 +36,7 @@ class CallSessionRead(BaseModel):
     created_at: datetime
     channel_name: Optional[str] = None
 
-    class Config:
-        from_attributes = True
-
-
+    model_config = ConfigDict(from_attributes=True)
 # ---------- PARTICIPANT ----------
 class CallParticipantCreate(BaseModel):
     call_session_id: UUID

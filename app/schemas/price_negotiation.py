@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from datetime import datetime
 from typing import Optional
 import uuid
@@ -34,5 +34,4 @@ class PriceNegotiationRead(BaseModel):
     initiator: Optional[UserRead] = None
     receiver: Optional[UserRead] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)

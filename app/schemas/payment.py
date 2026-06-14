@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 from typing import Optional
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from app.models.payment_request import DepositStatus, WithdrawalStatus
 
 
@@ -37,10 +37,7 @@ class BankAccountRead(BaseModel):
     is_default: bool
     created_at: datetime
 
-    class Config:
-        from_attributes = True
-
-
+    model_config = ConfigDict(from_attributes=True)
 # ─── Deposit Schemas ─────────────────────────────────────────────────────────
 
 class DepositInitiateRequest(BaseModel):
@@ -68,10 +65,7 @@ class DepositRead(BaseModel):
     created_at: datetime
     updated_at: datetime
 
-    class Config:
-        from_attributes = True
-
-
+    model_config = ConfigDict(from_attributes=True)
 # ─── Withdrawal Schemas ──────────────────────────────────────────────────────
 
 class WithdrawalRequestCreate(BaseModel):
@@ -89,10 +83,7 @@ class WithdrawalRequestRead(BaseModel):
     created_at: datetime
     updated_at: datetime
 
-    class Config:
-        from_attributes = True
-
-
+    model_config = ConfigDict(from_attributes=True)
 class WithdrawalRequestAdminRead(BaseModel):
     """Extended read schema for admin views — includes bank account info."""
     id: uuid.UUID
@@ -110,10 +101,7 @@ class WithdrawalRequestAdminRead(BaseModel):
     created_at: datetime
     updated_at: datetime
 
-    class Config:
-        from_attributes = True
-
-
+    model_config = ConfigDict(from_attributes=True)
 class WithdrawalRejectRequest(BaseModel):
     reason: str
 
@@ -126,10 +114,7 @@ class AdminPaymentSettingsRead(BaseModel):
     screen_deposits: bool
     updated_at: datetime
 
-    class Config:
-        from_attributes = True
-
-
+    model_config = ConfigDict(from_attributes=True)
 class AdminPaymentSettingsUpdate(BaseModel):
     auto_approve_withdrawals: Optional[bool] = None
     screen_deposits: Optional[bool] = None

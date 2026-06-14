@@ -7,6 +7,7 @@ from app.workers.tasks.email_service_task import send_email_task
 
 from app.core.background import dispatch_task
 from app.dependencies.email_service import EmailService
+from app.config import settings
 
 import os
 
@@ -46,13 +47,13 @@ class NotificationService:
         context = {
             'name': new_user.username,
             'cta_text': "Explore Your Dashboard",
-            'cta_link': "https://your-frontend.com/dashboard" # Configure dynamically in the future
+            'cta_link': f"{settings.frontend_url}/dashboard"
         }
         self._render_and_dispatch('welcome.html', [str(new_user.email)], subject, context)
 
     def send_verification_email(self, new_user: UserRead, token: str):
         subject = "Welcome to DGE World! Please Verify Your Email"
-        verification_link = f"https://your-api.com/v1/users/verify-email?token={token}"
+        verification_link = f"{settings.api_url}/v1/users/verify-email?token={token}"
         context = {
             'name': new_user.username,
             'cta_link': verification_link
@@ -64,7 +65,7 @@ class NotificationService:
         context = {
             'name': user.username,
             'cta_text': "Go to Your Dashboard",
-            'cta_link': "https://your-frontend.com/dashboard"
+            'cta_link': f"{settings.frontend_url}/dashboard"
         }
         self._render_and_dispatch('welcome.html', [str(user.email)], subject, context)
 
@@ -77,7 +78,7 @@ class NotificationService:
             'amount': f"₦{amount_cents / 100:,.2f}",
             'reference': reference,
             'date': date_str,
-            'cta_link': "https://your-frontend.com/dashboard/wallet"
+            'cta_link': f"{settings.frontend_url}/dashboard/wallet"
         }
         self._render_and_dispatch('deposit_success.html', [user.email], subject, context)
 
@@ -91,7 +92,7 @@ class NotificationService:
                 'amount': amount_str,
                 'bank_name': bank_name,
                 'account_number': account_number,
-                'cta_link': "https://your-frontend.com/dashboard/wallet"
+                'cta_link': f"{settings.frontend_url}/dashboard/wallet"
             }
             self._render_and_dispatch('withdrawal_requested.html', [user.email], subject, context)
         else:
@@ -104,7 +105,7 @@ class NotificationService:
                 'account_number': account_number,
                 'reference': reference or 'N/A',
                 'rejection_reason': rejection_reason,
-                'cta_link': "https://your-frontend.com/dashboard/wallet"
+                'cta_link': f"{settings.frontend_url}/dashboard/wallet"
             }
             self._render_and_dispatch('withdrawal_processed.html', [user.email], subject, context)
 
@@ -121,7 +122,7 @@ class NotificationService:
             'service_title': service_title,
             'amount': amount_str,
             'order_id': order_id,
-            'cta_link': "https://your-frontend.com/dashboard/orders"
+            'cta_link': f"{settings.frontend_url}/dashboard/orders"
         })
 
         # To Seller (New Order)
@@ -132,7 +133,7 @@ class NotificationService:
             'service_title': service_title,
             'amount': amount_str,
             'order_id': order_id,
-            'cta_link': "https://your-frontend.com/dashboard/orders"
+            'cta_link': f"{settings.frontend_url}/dashboard/orders"
         })
 
     def send_project_submitted_mail(self, client: Users, freelancer_name: str, project_name: str, escrow_id: str, submission_date: str):
@@ -143,7 +144,7 @@ class NotificationService:
             'project_name': project_name,
             'submission_date': submission_date,
             'escrow_id': escrow_id,
-            'cta_link': "https://your-frontend.com/dashboard/orders"
+            'cta_link': f"{settings.frontend_url}/dashboard/orders"
         }
         self._render_and_dispatch('project_submitted.html', [client.email], subject, context)
 
@@ -157,7 +158,7 @@ class NotificationService:
             'initiator_name': initiator.username,
             'amount': amount_formatted,
             'related_item': "Project Service",
-            'cta_link': "https://your-frontend.com/dashboard/negotiations"
+            'cta_link': f"{settings.frontend_url}/dashboard/negotiations"
         }
         self._render_and_dispatch('negotiation_received.html', [receiver.email], subject, context)
 
@@ -172,7 +173,7 @@ class NotificationService:
             'escrow_id': "See Dashboard", # Don't have ID here in original code
             'amount': f"₦{negotiation.proposed_price_cents / 100:,.2f}",
             'cta_text': "View Transaction Details",
-            'cta_link': "https://your-frontend.com/dashboard/escrows"
+            'cta_link': f"{settings.frontend_url}/dashboard/escrows"
         }
         self._render_and_dispatch('escrow_event.html', [payer.email], subject, context)
 
@@ -185,7 +186,7 @@ class NotificationService:
             'escrow_id': str(escrow.id),
             'amount': f"₦{escrow.amount_cents / 100:,.2f}",
             'cta_text': "View Wallet",
-            'cta_link': "https://your-frontend.com/dashboard/wallet"
+            'cta_link': f"{settings.frontend_url}/dashboard/wallet"
         }
         self._render_and_dispatch('escrow_event.html', [payee.email], subject, context)
 
@@ -199,7 +200,7 @@ class NotificationService:
             'name': payee.username,
             'escrow_id': str(escrow.id),
             'cta_text': "View Transaction Details",
-            'cta_link': "https://your-frontend.com/dashboard/escrows"
+            'cta_link': f"{settings.frontend_url}/dashboard/escrows"
         }
         self._render_and_dispatch('escrow_event.html', [payee.email], subject, payee_context)
 
@@ -211,7 +212,7 @@ class NotificationService:
             'escrow_id': str(escrow.id),
             'amount': f"₦{escrow.amount_cents / 100:,.2f}",
             'cta_text': "View Transaction Details",
-            'cta_link': "https://your-frontend.com/dashboard/escrows"
+            'cta_link': f"{settings.frontend_url}/dashboard/escrows"
         }
         self._render_and_dispatch('escrow_event.html', [payer.email], subject, payer_context)
 
@@ -224,7 +225,7 @@ class NotificationService:
             'escrow_id': str(escrow.id),
             'amount': f"₦{escrow.amount_cents / 100:,.2f}",
             'cta_text': "View Your Wallet",
-            'cta_link': "https://your-frontend.com/dashboard/wallet"
+            'cta_link': f"{settings.frontend_url}/dashboard/wallet"
         }
         self._render_and_dispatch('escrow_event.html', [payer.email], subject, context)
 
@@ -238,7 +239,7 @@ class NotificationService:
             'name': payer.username,
             'escrow_id': str(escrow.id),
             'cta_text': "Go to Dispute Center",
-            'cta_link': "https://your-frontend.com/dashboard/support"
+            'cta_link': f"{settings.frontend_url}/dashboard/support"
         })
 
         # Payee
@@ -248,7 +249,7 @@ class NotificationService:
             'name': payee.username,
             'escrow_id': str(escrow.id),
             'cta_text': "Go to Dispute Center",
-            'cta_link': "https://your-frontend.com/dashboard/support"
+            'cta_link': f"{settings.frontend_url}/dashboard/support"
         })
 
     # ─── Rides ──────────────────────────────────────────────────────────────
@@ -261,10 +262,10 @@ class NotificationService:
             'service_title': "Ride Completed",
             'provider_name': driver.username,
             'price': f"₦{trip.final_fare:,.2f}",
-            'cta_link': "https://your-frontend.com/dashboard/rides",
+            'cta_link': f"{settings.frontend_url}/dashboard/rides",
             'message': "Thank you for riding with us. Your fare has been successfully processed."
         }
-        self._render_and_dispatch('service_purchase.html', [rider.email], rider_subject, rider_context)
+        self._render_and_dispatch('ride_completed.html', [rider.email], rider_subject, rider_context)
 
         # Driver email
         driver_subject = "Ride Successfully Completed! 🎉"
@@ -273,10 +274,10 @@ class NotificationService:
             'service_title': "Ride Earnings Added",
             'provider_name': rider.username,
             'price': f"₦{trip.final_fare:,.2f}",
-            'cta_link': "https://your-frontend.com/dashboard/driving",
+            'cta_link': f"{settings.frontend_url}/dashboard/driving",
             'message': "Great job! The fare has been credited to your earnings wallet."
         }
-        self._render_and_dispatch('service_purchase.html', [driver.email], driver_subject, driver_context)
+        self._render_and_dispatch('ride_completed.html', [driver.email], driver_subject, driver_context)
 
     def send_ride_cancelled_mail(self, rider: Users, driver: Users, cancelled_by: Users):
         subject = "Ride Request Cancelled"
@@ -287,10 +288,10 @@ class NotificationService:
             'service_title': "Ride Cancelled",
             'provider_name': driver.username if driver else "Unknown Driver",
             'price': "₦0.00",
-            'cta_link': "https://your-frontend.com/dashboard",
+            'cta_link': f"{settings.frontend_url}/dashboard",
             'message': f"Your ride was cancelled by {cancelled_by.username}. No charges were made."
         }
-        self._render_and_dispatch('service_purchase.html', [rider.email], subject, rider_context)
+        self._render_and_dispatch('ride_cancelled.html', [rider.email], subject, rider_context)
 
         # Driver email (if assigned)
         if driver:
@@ -299,7 +300,7 @@ class NotificationService:
                 'service_title': "Ride Cancelled",
                 'provider_name': rider.username,
                 'price': "₦0.00",
-                'cta_link': "https://your-frontend.com/dashboard/driving",
+                'cta_link': f"{settings.frontend_url}/dashboard/driving",
                 'message': f"The ride was cancelled by {cancelled_by.username}."
             }
-            self._render_and_dispatch('service_purchase.html', [driver.email], subject, driver_context)
+            self._render_and_dispatch('ride_cancelled.html', [driver.email], subject, driver_context)

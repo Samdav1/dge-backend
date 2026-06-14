@@ -88,6 +88,8 @@ class DriverNearbyResponse(SQLModel):
     distance_km: float
     car_name: str
     driver_name: str = "Driver"
+    rating: float = 5.0
+    driver_avatar: Optional[str] = None
 
 
 # ---------------------------------------------------------------------------
@@ -121,6 +123,7 @@ class TripRead(SQLModel):
     distance_km: float
     estimated_fare: float
     final_fare: Optional[float] = None
+    negotiated_fare: Optional[float] = None
     surge_multiplier: float
     status: TripStatus
     requested_at: datetime
@@ -148,3 +151,11 @@ class FareEstimateResponse(SQLModel):
     distance_charge: float
     surge_multiplier: float
     estimated_fare: float
+
+class TripReviewCreate(SQLModel):
+    rating: int
+    comment: str
+
+
+class TripCounter(SQLModel):
+    counter_fare: float

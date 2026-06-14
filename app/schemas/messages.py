@@ -2,7 +2,7 @@
 import uuid
 from datetime import datetime
 from typing import Optional, Dict, Any, List
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from enum import Enum
 
 class MessageContentType(str, Enum):
@@ -42,9 +42,7 @@ class MessageAttachmentRead(MessageAttachmentBase):
     message_id: uuid.UUID
     created_at: datetime
 
-    class Config:
-        from_attributes = True
-
+    model_config = ConfigDict(from_attributes=True)
 class MessageReadReceiptBase(BaseModel):
     pass
 
@@ -60,9 +58,7 @@ class MessageReadReceiptRead(MessageReadReceiptBase):
     user_id: uuid.UUID
     read_at: datetime
 
-    class Config:
-        from_attributes = True
-
+    model_config = ConfigDict(from_attributes=True)
 class MessageBase(BaseModel):
     content: str
     content_type: MessageContentType
@@ -95,10 +91,7 @@ class MessageRead(MessageBase):
     # replies: List["MessageRead"] = []
     # read_receipts: List[MessageReadReceiptRead] = []
 
-    class Config:
-        from_attributes = True
-
-
+    model_config = ConfigDict(from_attributes=True)
 MessageRead.model_rebuild()  # for self-referencing replies
 
 class PresenceBase(BaseModel):
@@ -122,6 +115,4 @@ class PresenceRead(BaseModel):
     user_id: uuid.UUID
     last_seen: datetime
 
-    class Config:
-        from_attributes = True
-
+    model_config = ConfigDict(from_attributes=True)

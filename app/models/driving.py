@@ -166,6 +166,7 @@ class Trip(SQLModel, table=True):
     distance_km: float = Field(default=0.0, sa_column=Column(Float, nullable=False, server_default="0"))
     estimated_fare: float = Field(default=0.0, sa_column=Column(Float, nullable=False, server_default="0"))
     final_fare: Optional[float] = Field(default=None, nullable=True)
+    negotiated_fare: Optional[float] = Field(default=None, nullable=True)
     surge_multiplier: float = Field(
         default=1.0, sa_column=Column(Float, nullable=False, server_default="1.0")
     )

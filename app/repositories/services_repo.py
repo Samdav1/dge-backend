@@ -44,11 +44,19 @@ class ServiceRepository:
             sort_by: str = "newest",  # Added for frontend sorting sections
     ) -> List[Service]:
 
+        from app.models.portfolio import UserPortfolio, Review
         q = select(Service).options(
             selectinload(Service.categories),
             joinedload(Service.user).options(
                 joinedload(Users.profile),
-                selectinload(Users.portfolios)
+                selectinload(Users.portfolios).options(
+                    selectinload(UserPortfolio.media_files),
+                    selectinload(UserPortfolio.reviews).options(
+                        selectinload(Review.user).options(
+                            joinedload(Users.profile)
+                        )
+                    )
+                )
             )
         )
 
@@ -84,9 +92,21 @@ class ServiceRepository:
         return result.all()
 
     async def get(self, service_id: uuid.UUID):
+        from app.models.portfolio import UserPortfolio, Review
         q = select(Service).where(Service.id == service_id).options(
             selectinload(Service.categories),
-            selectinload(Service.user).options(selectinload(Users.profile), selectinload(Users.portfolios)))
+            selectinload(Service.user).options(
+                selectinload(Users.profile),
+                selectinload(Users.portfolios).options(
+                    selectinload(UserPortfolio.media_files),
+                    selectinload(UserPortfolio.reviews).options(
+                        selectinload(Review.user).options(
+                            joinedload(Users.profile)
+                        )
+                    )
+                )
+            )
+        )
 
         result = await self.session.exec(q)
         service = result.first()

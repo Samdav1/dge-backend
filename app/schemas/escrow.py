@@ -1,5 +1,5 @@
 # app/schemas/escrow.py
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 from typing import Optional
 import uuid
 from enum import Enum
@@ -42,13 +42,9 @@ class EscrowRead(BaseModel):
     payer_wallet: Optional[WalletRead] = None
     payee_wallet: Optional[WalletRead] = None
 
-    class Config:
-        from_attributes = True
-
-
+    model_config = ConfigDict(from_attributes=True)
 class EscrowActionResponse(BaseModel):
     id: uuid.UUID
     status: EscrowStatusStr
     message: str
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)

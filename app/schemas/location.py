@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from app.models.user import LocationType
 
 
@@ -27,5 +27,5 @@ class LocationRead(BaseModel):
     accuracy_meter: float
     updated_at: datetime
 
-    class Config:
-        from_attributes = True  # ✅ required for SQLModel → Pydantic conversion
+    model_config = ConfigDict(from_attributes=True)
+# ✅ required for SQLModel → Pydantic conversion

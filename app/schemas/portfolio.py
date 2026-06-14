@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field, HttpUrl
+from pydantic import BaseModel, Field, HttpUrl, ConfigDict, model_validator
 from typing import Optional, List
 from datetime import datetime
 import uuid
@@ -44,11 +44,12 @@ class UserPortfolioRead(UserPortfolioBase):
     created_at: datetime
     updated_at: datetime
 
-    class Config:
-        from_attributes = True
-
+    model_config = ConfigDict(from_attributes=True)
 class UserPortfolioWithMediaRead(UserPortfolioRead):
     media_files: Optional[List["PortfolioMediaRead"]] = None
+
+class UserPortfolioWithDetailsRead(UserPortfolioWithMediaRead):
+    reviews: Optional[List["ReviewRead"]] = None
 
 class PortfolioMediaBase(BaseModel):
     media_type: str
@@ -75,10 +76,7 @@ class PortfolioMediaRead(PortfolioMediaBase):
     portfolio_id: uuid.UUID
     created_at: datetime
 
-    class Config:
-        from_attributes = True
-
-
+    model_config = ConfigDict(from_attributes=True)
 class ReviewBase(BaseModel):
     rating: int = Field(..., ge=1, le=5)
     comment: str
@@ -98,11 +96,37 @@ class ReviewRead(ReviewBase):
     user_id: uuid.UUID
     portfolio_id: uuid.UUID
     created_at: datetime
+    reviewer_name: Optional[str] = None
+    reviewer_avatar: Optional[str] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
+    @model_validator(mode="before")
+    @classmethod
+    def populate_reviewer_info(cls, data):
+        if not isinstance(data, dict):
+            user = getattr(data, "user", None)
+            reviewer_name = "Anonymous"
+            reviewer_avatar = None
+            if user:
+                profile = getattr(user, "profile", None)
+                if profile:
+                    first = getattr(profile, "first_name", "") or ""
+                    last = getattr(profile, "last_name", "") or ""
+                    name = f"{first} {last}".strip()
+                    reviewer_name = name if name else getattr(user, "username", "Anonymous")
+                    reviewer_avatar = getattr(profile, "avatar_url", None)
+                else:
+                    reviewer_name = getattr(user, "username", "Anonymous")
+            try:
+                setattr(data, "reviewer_name", reviewer_name)
+                setattr(data, "reviewer_avatar", reviewer_avatar)
+            except Exception:
+                pass
+        return data
 
 UserPortfolioRead.model_rebuild()
+UserPortfolioWithMediaRead.model_rebuild()
+UserPortfolioWithDetailsRead.model_rebuild()
 PortfolioMediaRead.model_rebuild()
 ReviewRead.model_rebuild()

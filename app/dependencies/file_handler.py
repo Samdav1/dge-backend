@@ -34,6 +34,8 @@ async def save_portfolio_media(file: UploadFile) -> str:
 
 
 async def save_avatar(file: UploadFile) -> str:
+    if not file or not file.filename:
+        return None
     if not file.content_type.startswith("image/"):
         raise HTTPException(status_code=400, detail="Only image files are allowed.")
 

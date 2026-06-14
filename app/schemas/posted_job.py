@@ -1,4 +1,4 @@
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, field_validator, ConfigDict
 from datetime import datetime
 from typing import Optional
 import uuid
@@ -34,18 +34,12 @@ class PostedJobCategoryRead(BaseModel):
     name: str
     icon: Optional[str] = None
 
-    class Config:
-        from_attributes = True
-
-
+    model_config = ConfigDict(from_attributes=True)
 class PostedJobPosterRead(BaseModel):
     id: uuid.UUID
     username: str
 
-    class Config:
-        from_attributes = True
-
-
+    model_config = ConfigDict(from_attributes=True)
 class PostedJobRead(BaseModel):
     id: uuid.UUID
     user_id: uuid.UUID
@@ -61,5 +55,4 @@ class PostedJobRead(BaseModel):
     category: Optional[PostedJobCategoryRead] = None
     bid_count: Optional[int] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
