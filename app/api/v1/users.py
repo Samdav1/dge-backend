@@ -66,3 +66,19 @@ async def verify_email_token(token: str, db: AsyncSession = Depends(get_session)
         return {'message': 'Email Verification Successfully'}
     except Exception as e:
         raise HTTPException(detail=str(e), status_code=status.HTTP_400_BAD_REQUEST)
+
+
+from fastapi.responses import RedirectResponse
+from app.config import settings
+
+@router.get("/verify-email")
+async def verify_email_via_link(token: str, db: AsyncSession = Depends(get_session)):
+    """
+    GET endpoint for the email verification link.
+    Verifies the token and redirects the user to the frontend email-verified page.
+    """
+    try:
+        await verify_user_email_verification_token(token=token, db=db)
+        return RedirectResponse(url=f"{settings.frontend_url}/email-verified")
+    except Exception as e:
+        return RedirectResponse(url=f"{settings.frontend_url}/login?error=VerificationFailed")

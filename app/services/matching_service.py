@@ -70,6 +70,7 @@ class MatchingService:
         radius_km: float = 5.0,
         driver_id: Optional[uuid.UUID] = None,
         negotiated_fare: Optional[float] = None,
+        vehicle_type: str = "car",
     ) -> Trip:
         """
         Entry point called by POST /drivers/trips/request.
@@ -107,6 +108,25 @@ class MatchingService:
             is_avail = avail_raw and (avail_raw.decode() if isinstance(avail_raw, bytes) else str(avail_raw)) == "1"
             if not is_avail:
                 raise ValueError("Selected driver is currently unavailable.")
+
+            # 3. Check if driver has a verified vehicle of the requested type (or fallback to legacy type column)
+            driver_profile: Optional[DriverProfile] = await self.driver_repo.get_by_id(driver_uuid)
+            if not driver_profile:
+                raise ValueError("Selected driver profile not found in database.")
+
+            from sqlmodel import select
+            from app.models.driving import DriverVehicle
+            stmt = select(DriverVehicle).where(
+                DriverVehicle.driver_id == driver_uuid,
+                DriverVehicle.vehicle_type == vehicle_type,
+                DriverVehicle.is_verified == True
+            )
+            res = await self.session.exec(stmt)
+            driver_veh = res.first()
+            if not driver_veh:
+                # Fallback to driver's default vehicle_type column for backwards compatibility
+                if getattr(driver_profile, "vehicle_type", "car").lower() != vehicle_type.lower():
+                    raise ValueError(f"Selected driver does not support the '{vehicle_type}' transport method.")
         else:
             # Find nearest available driver via Redis GEO
             nearby = await self.redis_loc.find_nearby_available(
@@ -120,10 +140,41 @@ class MatchingService:
                     "Please try again in a moment."
                 )
 
-            # Pick the single closest driver
-            closest = nearby[0]
-            driver_uuid = uuid.UUID(closest["driver_id"])
-            distance_to_driver_km = closest["distance_km"]
+            # Pick the closest driver with the matching vehicle_type
+            driver_uuid = None
+            distance_to_driver_km = 0.0
+            from sqlmodel import select
+            from app.models.driving import DriverVehicle
+            for closest in nearby:
+                candidate_uuid = uuid.UUID(closest["driver_id"])
+                candidate_profile = await self.driver_repo.get_by_id(candidate_uuid)
+                
+                # Check for verified vehicle of the requested type first
+                stmt = select(DriverVehicle).where(
+                    DriverVehicle.driver_id == candidate_uuid,
+                    DriverVehicle.vehicle_type == vehicle_type,
+                    DriverVehicle.is_verified == True
+                )
+                res = await self.session.exec(stmt)
+                driver_veh = res.first()
+
+                has_veh = False
+                if driver_veh:
+                    has_veh = True
+                elif candidate_profile and getattr(candidate_profile, "vehicle_type", "car").lower() == vehicle_type.lower():
+                    # Fallback to legacy column
+                    has_veh = True
+
+                if candidate_profile and has_veh:
+                    driver_uuid = candidate_uuid
+                    distance_to_driver_km = closest["distance_km"]
+                    break
+
+            if not driver_uuid:
+                raise ValueError(
+                    f"No available drivers with vehicle type '{vehicle_type}' found within {radius_km} km. "
+                    "Please try again or select a different vehicle type."
+                )
 
         # 3. Fetch driver's PostgreSQL profile for notification payload
         driver_profile: Optional[DriverProfile] = await self.driver_repo.get_by_id(driver_uuid)
@@ -137,6 +188,7 @@ class MatchingService:
             dropoff_lat=dropoff_lat,
             dropoff_lng=dropoff_lng,
             surge_multiplier=surge_multiplier,
+            vehicle_type=vehicle_type,
         )
 
         # 5. Persist Trip record (PENDING — no driver linked yet until acceptance)
@@ -154,6 +206,7 @@ class MatchingService:
             negotiated_fare=negotiated_fare,
             surge_multiplier=surge_multiplier,
             status=TripStatus.PENDING,
+            vehicle_type=vehicle_type,
         )
         trip = await self.trip_repo.create(trip)
 
@@ -161,7 +214,10 @@ class MatchingService:
         await self.redis_loc.set_availability(driver_uuid, available=False)
 
         # 7. Push ride_request notification to driver via WebSocket
-        await self._notify_driver(driver_profile, trip, fare, distance_to_driver_km)
+        try:
+            await self._notify_driver(driver_profile, trip, fare, distance_to_driver_km)
+        except Exception as e:
+            logger.error("Failed to notify driver %s: %s", driver_uuid, e)
 
         # 8. Schedule acceptance timeout in background
         asyncio.create_task(self._acceptance_timeout(trip.id, driver_uuid, str(rider_id)))
@@ -182,6 +238,7 @@ class MatchingService:
         pickup_address: Optional[str] = None,
         dropoff_address: Optional[str] = None,
         radius_km: float = 5.0,
+        vehicle_type: str = "car",
     ) -> dict:
         """
         Find nearby drivers and push an 'incoming_ride_intent' WebSocket event to them.
@@ -201,6 +258,7 @@ class MatchingService:
             pickup_lng=pickup_lng,
             dropoff_lat=dropoff_lat,
             dropoff_lng=dropoff_lng,
+            vehicle_type=vehicle_type,
         )
 
         notified_count = 0
@@ -209,7 +267,7 @@ class MatchingService:
             distance_to_driver_km = driver["distance_km"]
 
             driver_profile = await self.driver_repo.get_by_id(driver_uuid)
-            if not driver_profile:
+            if not driver_profile or getattr(driver_profile, "vehicle_type", "car").lower() != vehicle_type.lower():
                 continue
 
             payload = {
@@ -228,6 +286,7 @@ class MatchingService:
                 "distance_km": fare.distance_km,
                 "estimated_fare": fare.estimated_fare,
                 "distance_to_pickup_km": distance_to_driver_km,
+                "vehicle_type": vehicle_type,
             }
             await self.manager.send_to_user(str(driver_profile.user_id), payload)
             notified_count += 1
@@ -250,6 +309,7 @@ class MatchingService:
             "estimated_fare": fare.estimated_fare,
             "distance_to_pickup_km": 0, # Cannot compute accurate distance without driver location
             "is_global": True,
+            "vehicle_type": vehicle_type,
         }
         await self.manager.broadcast_conversation("driving_requests_global", global_payload)
 
@@ -267,6 +327,25 @@ class MatchingService:
             raise PermissionError("This trip is not assigned to you.")
         if trip.status != TripStatus.PENDING:
             raise ValueError(f"Trip cannot be accepted — current status: {trip.status}")
+
+        # Check if driver supports and has a verified vehicle for the requested vehicle type
+        driver_profile = await self.driver_repo.get_by_id(driver_id)
+        if not driver_profile:
+            raise ValueError("Driver profile not found.")
+
+        from sqlmodel import select
+        from app.models.driving import DriverVehicle
+        stmt = select(DriverVehicle).where(
+            DriverVehicle.driver_id == driver_id,
+            DriverVehicle.vehicle_type == trip.vehicle_type,
+            DriverVehicle.is_verified == True
+        )
+        res = await self.session.exec(stmt)
+        driver_veh = res.first()
+        if not driver_veh:
+            # Fallback to driver's default vehicle_type column for backwards compatibility
+            if getattr(driver_profile, "vehicle_type", "car").lower() != trip.vehicle_type.lower():
+                raise ValueError(f"You do not support the '{trip.vehicle_type}' transport method.")
 
         trip.status = TripStatus.EN_ROUTE
         trip.accepted_at = datetime.now(timezone.utc)
@@ -672,6 +751,10 @@ class MatchingService:
 
     async def _notify_driver(self, driver_profile, trip: Trip, fare, distance_to_driver_km: float):
         """Push a ride_request event to the driver's WebSocket connection."""
+        logger.info(
+            "_notify_driver: Sending ride_request to driver_profile.id=%s, driver_profile.user_id=%s, trip_id=%s",
+            driver_profile.id, driver_profile.user_id, trip.id
+        )
         payload = {
             "type": "ride_request",
             "trip_id": str(trip.id),
@@ -695,17 +778,22 @@ class MatchingService:
         await self.manager.send_to_user(str(driver_profile.user_id), payload)
 
         # 1. Add DB notification for driver
-        from app.repositories.notifications_repo import NotificationRepository
-        from app.models.notifications import Notification, NotificationType
-        notif_repo = NotificationRepository(self.session)
-        new_notif = Notification(
-            user_id=driver_profile.user_id,
-            actor_id=trip.rider_id,
-            type=NotificationType.general,
-            message=f"You have a new ride request! Route: {trip.pickup_address[:15]}... to {trip.dropoff_address[:15]}...",
-            metadataInfo={"trip_id": str(trip.id), "type": "ride_requested"}
-        )
-        await notif_repo.create(new_notif)
+        try:
+            from app.repositories.notifications_repo import NotificationRepository
+            from app.models.notifications import Notification, NotificationType
+            notif_repo = NotificationRepository(self.session)
+            pickup_display = (trip.pickup_address or "Pickup")[:15]
+            dropoff_display = (trip.dropoff_address or "Dropoff")[:15]
+            new_notif = Notification(
+                user_id=driver_profile.user_id,
+                actor_id=trip.rider_id,
+                type=NotificationType.general,
+                message=f"You have a new ride request! Route: {pickup_display}... to {dropoff_display}...",
+                metadataInfo={"trip_id": str(trip.id), "type": "ride_requested"}
+            )
+            await notif_repo.create(new_notif)
+        except Exception as e:
+            logger.error(f"Failed to create notification for driver ride request: {e}")
 
         # 2. Send Email notification
         try:
@@ -717,6 +805,8 @@ class MatchingService:
                 # Reuse the service_purchase template as a temporary fix for a ride request email
                 email_svc = EmailService()
                 rider_user = await get_user_by_id(trip.rider_id, self.session)
+                pickup_title = (trip.pickup_address or "Pickup")[:20]
+                dropoff_title = (trip.dropoff_address or "Dropoff")[:20]
                 if rider_user:
                     email_svc._render_and_dispatch(
                         'service_purchase.html',
@@ -726,7 +816,7 @@ class MatchingService:
                             'is_buyer': False,
                             'name': driver_user.username,
                             'other_party': rider_user.username,
-                            'service_title': f"Ride Request: {trip.pickup_address[:20]} to {trip.dropoff_address[:20]}",
+                            'service_title': f"Ride Request: {pickup_title} to {dropoff_title}",
                             'amount': f"₦{fare.estimated_fare:,.2f}",
                             'order_id': str(trip.id)[:8],
                             'cta_link': "https://cprohub.vercel.app/dashboard/driving"

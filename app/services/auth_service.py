@@ -27,6 +27,8 @@ async def login(user_info: UserLogin, db):
     user_detail = await get_user(user_info, db)
     if not user_detail:
         return False
+    elif not user_detail.password:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Incorrect password")
     elif not decrypt.verify(user_info.password, user_detail.password):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Incorrect password")
     else:
@@ -48,6 +50,8 @@ async def token_login(user_info: UserToken, db):
     user_detail = await get_user_token(user_info, db)
     if not user_detail:
         return False
+    elif not user_detail.password:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Incorrect password")
     elif not decrypt.verify(user_info.password, user_detail.password):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Incorrect password")
     else:

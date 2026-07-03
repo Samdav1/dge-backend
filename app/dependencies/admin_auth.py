@@ -69,7 +69,9 @@ async def get_current_admin(
 
 async def get_current_user_ws(token: str, db: AsyncSession):
     try:
-        payload = await decode_access_token(token)
+        # Allow expired access tokens for WebSocket handshake as long as the signature is valid
+        # and user status check in DB succeeds below.
+        payload = await decode_access_token(token, options={"verify_exp": False})
     except Exception:
         return None
         

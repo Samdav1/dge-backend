@@ -27,19 +27,35 @@ class EmailService:
         """
         Initializes the service by loading configuration from environment variables.
         """
-        self.config = {
-            'host': os.getenv("EMAIL_HOST", "smtp.gmail.com"),
-            'port': int(os.getenv("EMAIL_PORT", 465)),
-            'use_ssl': os.getenv("EMAIL_USE_SSL", "false").lower() == "true",
-            'username': os.getenv("USERNAME"),
-            'password': os.getenv("EMAIL_PASS"),
-            'sender_name': os.getenv("EMAIL_SENDER_NAME", "Your App"),
-            'sender_address': os.getenv("EMAIL_SENDER_ADDRESS"),
-        }
+        from app.config import settings
+
+        provider = settings.email_provider.lower()
+        sender_name = os.getenv("EMAIL_SENDER_NAME", "DGE World")
+
+        if provider == "cpanel":
+            self.config = {
+                'host': settings.email_host_cpanel or os.getenv("EMAIL_HOST", "mail.dgetechs.com"),
+                'port': settings.email_port_cpanel,
+                'use_ssl': settings.email_use_ssl_cpanel,
+                'username': settings.username_cpanel or os.getenv("USERNAME"),
+                'password': settings.email_pass_cpanel or os.getenv("EMAIL_PASS"),
+                'sender_name': sender_name,
+                'sender_address': settings.email_sender_address_cpanel or os.getenv("EMAIL_SENDER_ADDRESS"),
+            }
+        else: # default to google
+            self.config = {
+                'host': settings.email_host_google or os.getenv("EMAIL_HOST", "smtp.gmail.com"),
+                'port': settings.email_port_google,
+                'use_ssl': settings.email_use_ssl_google,
+                'username': settings.username_google or os.getenv("USERNAME"),
+                'password': settings.email_pass_google or os.getenv("EMAIL_PASS"),
+                'sender_name': sender_name,
+                'sender_address': settings.email_sender_address_google or os.getenv("EMAIL_SENDER_ADDRESS"),
+            }
 
         if not all([self.config['username'], self.config['password'], self.config['sender_address']]):
             raise ValueError(
-                "EMAIL_USERNAME, EMAIL_PASSWORD, and EMAIL_SENDER_ADDRESS must be set in your environment.")
+                "SMTP username, password, and sender_address must be set in your configuration or environment.")
 
     def _create_message(
             self, recipients: List[str], subject: str, html_body: str,

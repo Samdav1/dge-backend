@@ -23,6 +23,7 @@ class ServiceCategoryUpdate(BaseModel):
 class ServiceCategoryRead(ServiceCategoryBase):
     id: uuid.UUID
     created_at: datetime
+    service_count: Optional[int] = 0
 
     model_config = ConfigDict(from_attributes=True)
 # For linking services <-> categories

@@ -32,7 +32,7 @@ import uuid
 from typing import List, Optional
 
 import redis.asyncio as aioredis
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status, File, UploadFile
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.db.session import get_session
@@ -43,6 +43,7 @@ from app.schemas.driving import (
     DriverNearbyResponse, LocationUpdate, LocationPing,
     TripRequest, TripRead, TripAccept, TripCancel, TripComplete,
     FareEstimateResponse, TripReviewCreate, TripCounter,
+    DriverVehicleCreate, DriverVehicleRead,
 )
 from app.schemas.user import UserRead
 from app.services.driving_service import DriverService, RideService, LocationService
@@ -91,6 +92,47 @@ def get_trip_repo(db: AsyncSession = Depends(get_session)) -> TripRepository:
     return TripRepository(db)
 
 
+async def get_trip_read_with_details(trip, db: AsyncSession) -> TripRead:
+    trip_read = TripRead.model_validate(trip)
+    
+    from app.models.user import Users
+    from app.models.profile import Profile
+    from sqlmodel import select
+
+    # 1. Populate Rider Details
+    rider_user = await db.get(Users, trip.rider_id)
+    if rider_user:
+        trip_read.rider_name = rider_user.username
+        stmt = select(Profile).where(Profile.user_id == trip.rider_id)
+        res = await db.execute(stmt)
+        rider_prof = res.scalars().first()
+        if rider_prof:
+            if rider_prof.avatar_url:
+                trip_read.rider_avatar = rider_prof.avatar_url
+            if rider_prof.first_name:
+                trip_read.rider_name = f"{rider_prof.first_name} {rider_prof.last_name or ''}".strip()
+                
+    # 2. Populate Driver Details
+    if trip.driver_id:
+        from app.models.driving import DriverProfile
+        driver_prof_record = await db.get(DriverProfile, trip.driver_id)
+        if driver_prof_record:
+            trip_read.driver_user_id = driver_prof_record.user_id
+            driver_user = await db.get(Users, driver_prof_record.user_id)
+            if driver_user:
+                trip_read.driver_name = driver_user.username
+                stmt = select(Profile).where(Profile.user_id == driver_prof_record.user_id)
+                res = await db.execute(stmt)
+                driver_prof = res.scalars().first()
+                if driver_prof:
+                    if driver_prof.avatar_url:
+                        trip_read.driver_avatar = driver_prof.avatar_url
+                    if driver_prof.first_name:
+                        trip_read.driver_name = f"{driver_prof.first_name} {driver_prof.last_name or ''}".strip()
+                        
+    return trip_read
+
+
 # ===========================================================================
 # Driver profile endpoints
 # ===========================================================================
@@ -137,6 +179,104 @@ async def update_my_driver_profile(
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Internal error: {str(e)}")
+
+
+@router.patch("/car-picture", response_model=DriverRead)
+async def upload_driver_car_picture(
+    file: UploadFile = File(...),
+    current_user: UserRead = Depends(get_current_user),
+    service: DriverService = Depends(get_driver_service),
+    db: AsyncSession = Depends(get_session),
+):
+    """Upload a vehicle/card picture for the driver's profile."""
+    try:
+        driver_profile = await service.get_driver_profile(current_user.id)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+    from app.dependencies.file_handler import save_avatar
+    picture_path = await save_avatar(file)
+    if not picture_path:
+        raise HTTPException(status_code=400, detail="Failed to save vehicle picture file.")
+
+    driver_profile.car_picture_url = picture_path
+    db.add(driver_profile)
+    await db.commit()
+    await db.refresh(driver_profile)
+    return driver_profile
+
+
+@router.patch("/license-picture", response_model=DriverRead)
+async def upload_driver_license_picture(
+    file: UploadFile = File(...),
+    current_user: UserRead = Depends(get_current_user),
+    service: DriverService = Depends(get_driver_service),
+    db: AsyncSession = Depends(get_session),
+):
+    """Upload a driver's license picture for verification."""
+    try:
+        driver_profile = await service.get_driver_profile(current_user.id)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+    from app.dependencies.file_handler import save_kyc_image
+    picture_path = await save_kyc_image(file)
+    if not picture_path:
+        raise HTTPException(status_code=400, detail="Failed to save license picture file.")
+
+    driver_profile.license_picture_url = picture_path
+    if driver_profile.license_number:
+        driver_profile.license_status = "pending"
+        driver_profile.license_rejection_reason = None
+        
+    db.add(driver_profile)
+    await db.commit()
+    await db.refresh(driver_profile)
+    return driver_profile
+
+
+@router.post("/vehicles", response_model=DriverVehicleRead, status_code=status.HTTP_201_CREATED)
+async def register_driver_vehicle(
+    payload: DriverVehicleCreate,
+    current_user: UserRead = Depends(get_current_user),
+    db: AsyncSession = Depends(get_session),
+    service: DriverService = Depends(get_driver_service),
+):
+    """Register and verify a new vehicle for the logged-in driver."""
+    driver_profile = await service.repo.get_by_user_id(current_user.id)
+    if not driver_profile:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Driver profile not found.")
+    
+    from app.models.driving import DriverVehicle
+    db_veh = DriverVehicle(
+        driver_id=driver_profile.id,
+        vehicle_type=payload.vehicle_type,
+        license_number=payload.license_number,
+        picture_url=payload.picture_url,
+        is_verified=True  # Immediately verified for testing/usability
+    )
+    db.add(db_veh)
+    await db.commit()
+    await db.refresh(db_veh)
+    return db_veh
+
+
+@router.get("/vehicles", response_model=List[DriverVehicleRead])
+async def list_driver_vehicles(
+    current_user: UserRead = Depends(get_current_user),
+    db: AsyncSession = Depends(get_session),
+    service: DriverService = Depends(get_driver_service),
+):
+    """List all registered vehicles for the logged-in driver."""
+    driver_profile = await service.repo.get_by_user_id(current_user.id)
+    if not driver_profile:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Driver profile not found.")
+    
+    from sqlmodel import select
+    from app.models.driving import DriverVehicle
+    stmt = select(DriverVehicle).where(DriverVehicle.driver_id == driver_profile.id)
+    res = await db.exec(stmt)
+    return res.all()
 
 
 # ===========================================================================
@@ -235,6 +375,24 @@ async def get_drivers_nearby(
             personal_prof = personal_prof_res.scalars().first()
             if personal_prof:
                 driver_avatar = personal_prof.avatar_url
+                if personal_prof.first_name:
+                    driver_name = f"{personal_prof.first_name} {personal_prof.last_name or ''}".strip()
+
+        # Get supported vehicles
+        supported_vehicles = []
+        if profile:
+            from app.models.driving import DriverVehicle
+            from sqlmodel import select
+            veh_res = await db.execute(
+                select(DriverVehicle).where(
+                    DriverVehicle.driver_id == profile.id,
+                    DriverVehicle.is_verified == True
+                )
+            )
+            vehicles_list = veh_res.scalars().all()
+            supported_vehicles = [v.vehicle_type.lower() for v in vehicles_list]
+            if not supported_vehicles:
+                supported_vehicles = [getattr(profile, "vehicle_type", "car").lower()]
 
         response.append(
             DriverNearbyResponse(
@@ -246,6 +404,7 @@ async def get_drivers_nearby(
                 driver_name=driver_name,
                 rating=rating,
                 driver_avatar=driver_avatar,
+                supported_vehicles=supported_vehicles,
             )
         )
     return response
@@ -325,6 +484,7 @@ async def request_ride(
             surge_multiplier=payload.surge_multiplier,
             driver_id=payload.driver_id,
             negotiated_fare=payload.negotiated_fare,
+            vehicle_type=payload.vehicle_type or "car",
         )
         return trip
     except ValueError as e:
@@ -357,6 +517,7 @@ async def broadcast_intent(
             dropoff_lng=payload.dropoff_lng,
             pickup_address=payload.pickup_address,
             dropoff_address=payload.dropoff_address,
+            vehicle_type=payload.vehicle_type or "car",
         )
         return result
     except Exception as e:
@@ -616,6 +777,7 @@ async def get_active_trip(
     current_user: UserRead = Depends(get_current_user),
     driver_service: DriverService = Depends(get_driver_service),
     repo: TripRepository = Depends(get_trip_repo),
+    db: AsyncSession = Depends(get_session),
 ):
     """
     Returns the user's current active or pending trip (either as rider or driver).
@@ -624,14 +786,7 @@ async def get_active_trip(
     # Check if they have an active trip as a rider
     rider_trip = await repo.get_active_for_rider(current_user.id)
     if rider_trip:
-        rider_trip_read = TripRead.model_validate(rider_trip)
-        if rider_trip.driver_id:
-            try:
-                profile = await driver_service.get_driver_profile_by_id(rider_trip.driver_id)
-                rider_trip_read.driver_user_id = profile.user_id
-            except Exception:
-                pass
-        return rider_trip_read
+        return await get_trip_read_with_details(rider_trip, db)
 
     # Check if they have an active trip as a driver
     try:
@@ -639,16 +794,12 @@ async def get_active_trip(
         if driver_profile:
             driver_trip = await repo.get_active_for_driver(driver_profile.id)
             if driver_trip:
-                driver_trip_read = TripRead.model_validate(driver_trip)
-                driver_trip_read.driver_user_id = driver_profile.user_id
-                return driver_trip_read
+                return await get_trip_read_with_details(driver_trip, db)
 
             # Optionally check pending trips for driver too
             pending_trip = await repo.get_pending_for_driver(driver_profile.id)
             if pending_trip:
-                pending_trip_read = TripRead.model_validate(pending_trip)
-                pending_trip_read.driver_user_id = driver_profile.user_id
-                return pending_trip_read
+                return await get_trip_read_with_details(pending_trip, db)
     except ValueError:
         pass
 
@@ -698,6 +849,7 @@ async def get_trip(
     current_user: UserRead = Depends(get_current_user),
     repo: TripRepository = Depends(get_trip_repo),
     driver_service: DriverService = Depends(get_driver_service),
+    db: AsyncSession = Depends(get_session),
 ):
     """Fetch a trip by ID. Returns 404 if not found or 403 if the user is not a party."""
     trip = await repo.get_by_id(trip_id)
@@ -716,14 +868,7 @@ async def get_trip(
     if trip.rider_id != current_user.id and (trip.driver_id is None or trip.driver_id != driver_profile_id):
         raise HTTPException(status_code=403, detail="You are not a party to this trip")
 
-    trip_read = TripRead.model_validate(trip)
-    if trip.driver_id:
-        try:
-            profile = await driver_service.get_driver_profile_by_id(trip.driver_id)
-            trip_read.driver_user_id = profile.user_id
-        except Exception:
-            pass
-    return trip_read
+    return await get_trip_read_with_details(trip, db)
 
 
 @router.post("/trips/{trip_id}/review", status_code=status.HTTP_201_CREATED)

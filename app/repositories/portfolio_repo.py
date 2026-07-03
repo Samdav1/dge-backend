@@ -60,7 +60,7 @@ async def update_portfolio_repo(portfolio_info: UserPortfolioUpdate, db:AsyncSes
         raise HTTPException(status_code=500, detail=f"Cannot Update UserPortfolio: {str(e)}")
 
 async def get_portfolio_by_id_and_owner(db: AsyncSession, *, portfolio_id, user_id) -> UserPortfolioRead:
-    statement = select(UserPortfolio).where(
+    statement = select(UserPortfolio).options(selectinload(UserPortfolio.media_files)).where(
         UserPortfolio.id == portfolio_id,
         UserPortfolio.user_id == user_id
     )

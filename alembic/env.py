@@ -14,6 +14,13 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')
 # access to the values within the .ini file in use.
 config = context.config
 
+# Override sqlalchemy.url with DB_URI from environment if present
+db_uri = os.getenv("DB_URI")
+if db_uri:
+    if "postgresql+asyncpg" in db_uri:
+        db_uri = db_uri.replace("postgresql+asyncpg", "postgresql+psycopg2")
+    config.set_main_option("sqlalchemy.url", db_uri)
+
 # Interpret the config file for Python logging.
 # This line sets up loggers basically.
 if config.config_file_name is not None:

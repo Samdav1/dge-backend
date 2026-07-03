@@ -39,6 +39,8 @@ class KYCBase(BaseModel):
     reviewed_by_id: Optional[UUID] = None
     submitted_at: Optional[datetime] = None
     reviewed_at: Optional[datetime] = None
+    metamap_verification_id: Optional[str] = None
+    metamap_flow_id: Optional[str] = None
 
 
 class KYCCreate(KYCBase):
@@ -65,6 +67,8 @@ class KYCUpdate(BaseModel):
     reviewed_by_id: Optional[UUID] = None
     submitted_at: Optional[datetime] = None
     reviewed_at: Optional[datetime] = None
+    metamap_verification_id: Optional[str] = None
+    metamap_flow_id: Optional[str] = None
 
 
 class KYCRead(KYCBase):

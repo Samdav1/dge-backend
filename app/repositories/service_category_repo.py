@@ -1,8 +1,9 @@
 from sqlmodel import Session, select
 from typing import List, Optional
+from sqlalchemy import func
 
 from sqlmodel.ext.asyncio.session import AsyncSession
-from app.models.services import ServiceCategory, ServiceCategoryLink
+from app.models.services import ServiceCategory, ServiceCategoryLink, Service
 from app.schemas.service_category import ServiceCategoryCreate, ServiceCategoryUpdate
 
 
@@ -21,8 +22,17 @@ class ServiceCategoryRepository:
         return await self.session.get(ServiceCategory, category_id)
 
     async def get_all_categories(self) -> List[ServiceCategory]:
-        result = await self.session.exec(select(ServiceCategory))
-        refined = result.all()
+        stmt = (
+            select(ServiceCategory, func.count(ServiceCategoryLink.service_id).label("service_count"))
+            .outerjoin(ServiceCategoryLink, ServiceCategory.id == ServiceCategoryLink.category_id)
+            .outerjoin(Service, (ServiceCategoryLink.service_id == Service.id) & (Service.status == "approved"))
+            .group_by(ServiceCategory.id)
+        )
+        result = await self.session.exec(stmt)
+        refined = []
+        for category, service_count in result.all():
+            object.__setattr__(category, "service_count", service_count)
+            refined.append(category)
         return refined
 
     async def update_category(self, category: ServiceCategory) -> ServiceCategory:

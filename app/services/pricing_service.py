@@ -23,6 +23,14 @@ BASE_FARE: float = 500.0      # NGN — flat flag-fall
 RATE_PER_KM: float = 300.0    # NGN per kilometre
 MIN_FARE: float = 1000.0      # NGN — minimum charge per trip
 
+VEHICLE_RATES = {
+    "car": {"base": 500.0, "rate": 300.0, "min": 1000.0},
+    "van": {"base": 800.0, "rate": 450.0, "min": 1500.0},
+    "truck": {"base": 1500.0, "rate": 600.0, "min": 3000.0},
+    "bike": {"base": 250.0, "rate": 150.0, "min": 500.0},
+    "tricycle": {"base": 300.0, "rate": 200.0, "min": 600.0},
+}
+
 
 # ---------------------------------------------------------------------------
 # Haversine distance
@@ -70,9 +78,10 @@ class FareBreakdown:
 def estimate_fare(
     distance_km: float,
     surge_multiplier: float = 1.0,
-    base_fare: float = BASE_FARE,
-    rate_per_km: float = RATE_PER_KM,
-    min_fare: float = MIN_FARE,
+    base_fare: float = None,
+    rate_per_km: float = None,
+    min_fare: float = None,
+    vehicle_type: str = "car",
 ) -> FareBreakdown:
     """
     Calculate the estimated fare for a trip.
@@ -80,13 +89,20 @@ def estimate_fare(
     Args:
         distance_km:      Straight-line or route distance in km.
         surge_multiplier: Demand-based multiplier (1.0 = normal, 2.0 = surge).
-        base_fare:        Flat flag-fall charge in USD.
-        rate_per_km:      Per-km rate in USD.
+        base_fare:        Flat flag-fall charge in NGN.
+        rate_per_km:      Per-km rate in NGN.
         min_fare:         Minimum fare regardless of distance.
+        vehicle_type:     Type of vehicle (car, van, truck, bike, tricycle)
 
     Returns:
         FareBreakdown dataclass with itemised charges.
     """
+    if base_fare is None or rate_per_km is None or min_fare is None:
+        rates = VEHICLE_RATES.get(vehicle_type.lower(), VEHICLE_RATES["car"])
+        base_fare = base_fare if base_fare is not None else rates["base"]
+        rate_per_km = rate_per_km if rate_per_km is not None else rates["rate"]
+        min_fare = min_fare if min_fare is not None else rates["min"]
+
     distance_charge = rate_per_km * distance_km
     subtotal = (base_fare + distance_charge) * surge_multiplier
     total = round(max(min_fare, subtotal), 2)
@@ -106,10 +122,11 @@ def calculate_trip_fare(
     dropoff_lat: float,
     dropoff_lng: float,
     surge_multiplier: float = 1.0,
+    vehicle_type: str = "car",
 ) -> FareBreakdown:
     """
     Convenience wrapper: compute distance then price in one call.
     Used by the Matching Engine when creating a new Trip record.
     """
     dist = haversine(pickup_lat, pickup_lng, dropoff_lat, dropoff_lng)
-    return estimate_fare(dist, surge_multiplier)
+    return estimate_fare(dist, surge_multiplier, vehicle_type=vehicle_type)

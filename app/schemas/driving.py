@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime
-from typing import Optional
+from typing import Optional, List
 from sqlmodel import SQLModel
 from app.models.driving import DriverRank, DriverStatus, RideStatus, TripStatus
 
@@ -13,6 +13,10 @@ class DriverBase(SQLModel):
     car_name: str
     car_model: str
     plate_number: str
+    vehicle_type: Optional[str] = "car"
+    car_picture_url: Optional[str] = None
+    license_number: Optional[str] = None
+    license_picture_url: Optional[str] = None
 
 class DriverCreate(DriverBase):
     pass
@@ -21,6 +25,12 @@ class DriverUpdate(SQLModel):
     car_name: Optional[str] = None
     car_model: Optional[str] = None
     plate_number: Optional[str] = None
+    vehicle_type: Optional[str] = None
+    car_picture_url: Optional[str] = None
+    license_number: Optional[str] = None
+    license_picture_url: Optional[str] = None
+    license_status: Optional[str] = None
+    license_rejection_reason: Optional[str] = None
 
 class DriverRead(DriverBase):
     id: uuid.UUID
@@ -30,6 +40,10 @@ class DriverRead(DriverBase):
     failed_rides: int
     rank: DriverRank
     status: DriverStatus
+    vehicle_type: str
+    car_picture_url: Optional[str] = None
+    license_status: str
+    license_rejection_reason: Optional[str] = None
 
 
 # ---------------------------------------------------------------------------
@@ -90,6 +104,7 @@ class DriverNearbyResponse(SQLModel):
     driver_name: str = "Driver"
     rating: float = 5.0
     driver_avatar: Optional[str] = None
+    supported_vehicles: List[str] = []
 
 
 # ---------------------------------------------------------------------------
@@ -107,6 +122,7 @@ class TripRequest(SQLModel):
     surge_multiplier: float = 1.0
     driver_id: Optional[uuid.UUID] = None
     negotiated_fare: Optional[float] = None
+    vehicle_type: Optional[str] = "car"
 
 class TripRead(SQLModel):
     """Full trip state returned to both rider and driver."""
@@ -129,6 +145,11 @@ class TripRead(SQLModel):
     requested_at: datetime
     accepted_at: Optional[datetime] = None
     completed_at: Optional[datetime] = None
+    driver_name: Optional[str] = None
+    driver_avatar: Optional[str] = None
+    rider_name: Optional[str] = None
+    rider_avatar: Optional[str] = None
+    vehicle_type: Optional[str] = "car"
 
 class TripAccept(SQLModel):
     """Driver sends this to accept a pending trip."""
@@ -159,3 +180,17 @@ class TripReviewCreate(SQLModel):
 
 class TripCounter(SQLModel):
     counter_fare: float
+
+class DriverVehicleCreate(SQLModel):
+    vehicle_type: str
+    license_number: str
+    picture_url: Optional[str] = None
+
+class DriverVehicleRead(SQLModel):
+    id: uuid.UUID
+    driver_id: uuid.UUID
+    vehicle_type: str
+    license_number: str
+    picture_url: Optional[str] = None
+    is_verified: bool
+    created_at: datetime

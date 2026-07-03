@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.repositories.services_repo import ServiceRepository
 from app.schemas.services import ServiceCreate, ServiceUpdate
-from app.models.services import Service
+from app.models.services import Service, ServiceStatus
 from app.dependencies.file_handler import save_service_image, save_avatar
 from app.schemas.user import UserRead
 
@@ -45,6 +45,7 @@ class ServiceService:
             meta_tags=payload.meta_tags,
             keywords=payload.keywords,
             image=image_path,
+            status=ServiceStatus.pending_review,
         )
         return await self.repo.create(service, payload.category_ids)
 

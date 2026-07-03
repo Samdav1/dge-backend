@@ -69,3 +69,13 @@ class ServiceList(ServiceRead):
     )
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class ServiceDetailRead(BaseModel):
+    service: ServiceRead
+    profile: Optional[ProfileRead] = None
+    portfolio: Optional[List[UserPortfolioWithDetailsRead]] = None
+    user: UserRead
+
+    model_config = ConfigDict(from_attributes=True)
+

@@ -60,6 +60,7 @@ async def get_stats(session: AsyncSession = Depends(get_session)):
     from app.models.services import Service
     from app.models.driving import DriverProfile
     from app.models.transactions import Transaction
+    from app.models.posted_job import PostedJob
 
     user_count_res = await session.execute(select(func.count()).select_from(Users))
     user_count = user_count_res.scalar() or 0
@@ -73,6 +74,9 @@ async def get_stats(session: AsyncSession = Depends(get_session)):
     tx_revenue_res = await session.execute(select(func.sum(Transaction.amount_cents)).select_from(Transaction))
     tx_revenue = tx_revenue_res.scalar() or 0
 
+    posted_jobs_count_res = await session.execute(select(func.count()).select_from(PostedJob))
+    posted_jobs_count = posted_jobs_count_res.scalar() or 0
+
     # Get recent users
     recent_users_res = await session.execute(select(Users).order_by(Users.created_at.desc()).limit(10))
     recent_users = recent_users_res.scalars().all()
@@ -84,10 +88,17 @@ async def get_stats(session: AsyncSession = Depends(get_session)):
     )
     recent_services = recent_services_res.scalars().all()
 
+    # Get recent posted jobs
+    recent_posted_jobs_res = await session.execute(
+        select(PostedJob).options(selectinload(PostedJob.user), selectinload(PostedJob.category)).order_by(PostedJob.created_at.desc()).limit(10)
+    )
+    recent_posted_jobs = recent_posted_jobs_res.scalars().all()
+
     return {
         "total_users": user_count,
         "total_services": services_count,
         "active_drivers": drivers_count,
+        "total_posted_jobs": posted_jobs_count,
         "total_revenue": float(tx_revenue) / 100.0,
         "recent_users": [
             {
@@ -110,6 +121,19 @@ async def get_stats(session: AsyncSession = Depends(get_session)):
                 "status": s.status.value.upper() if hasattr(s.status, "value") else str(s.status).upper()
             }
             for s in recent_services
+        ],
+        "recent_posted_jobs": [
+            {
+                "id": str(pj.id),
+                "user": u.username if (u := getattr(pj, "user", None)) else "Anonymous",
+                "title": pj.title,
+                "category": c.name if (c := getattr(pj, "category", None)) else "General",
+                "min_price": pj.min_price_cents / 100.0,
+                "max_price": pj.max_price_cents / 100.0,
+                "listed": pj.created_at.strftime("%d/%m/%Y") if pj.created_at else "",
+                "status": pj.status.value.upper() if hasattr(pj.status, "value") else str(pj.status).upper()
+            }
+            for pj in recent_posted_jobs
         ]
     }
 
@@ -459,9 +483,10 @@ async def create_super_admin_category(req: Request, db: AsyncSession = Depends(g
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid JSON body")
     name = body.get("name")
+    icon = body.get("icon")
     if not name:
         raise HTTPException(status_code=400, detail="Missing name")
-    cat = ServiceCategory(name=name)
+    cat = ServiceCategory(name=name, icon=icon)
     db.add(cat)
     await db.commit()
     await db.refresh(cat)
@@ -481,6 +506,7 @@ async def update_super_admin_category(category_id: str, req: Request, db: AsyncS
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid JSON body")
     name = body.get("name")
+    icon = body.get("icon")
     if not name:
         raise HTTPException(status_code=400, detail="Missing name")
     stmt = select(ServiceCategory).where(ServiceCategory.id == cat_uuid)
@@ -489,6 +515,7 @@ async def update_super_admin_category(category_id: str, req: Request, db: AsyncS
     if not cat:
         raise HTTPException(status_code=404, detail="Category not found")
     cat.name = name
+    cat.icon = icon
     await db.commit()
     await db.refresh(cat)
     return cat
@@ -949,6 +976,139 @@ async def list_admin_drivers(
         }
     }
 
+@router.get("/admin-drivers/licenses")
+async def list_admin_driver_licenses(
+    status: Optional[str] = "pending",
+    page: int = 1,
+    limit: int = 50,
+    db: AsyncSession = Depends(get_session),
+):
+    """List all driver license applications."""
+    from app.models.driving import DriverProfile
+    from app.models.user import Users
+    from sqlmodel import select, func
+    
+    stmt = select(DriverProfile, Users).join(Users, DriverProfile.user_id == Users.id).where(DriverProfile.license_number != None)
+    
+    if status and status.lower() != "all":
+        stmt = stmt.where(DriverProfile.license_status == status.lower())
+        
+    total_res = await db.execute(select(func.count()).select_from(stmt.subquery()))
+    total = total_res.scalar() or 0
+    
+    stmt = stmt.order_by(DriverProfile.updated_at.desc()).offset((page - 1) * limit).limit(limit)
+    res = await db.execute(stmt)
+    rows = res.all()
+    
+    items = []
+    for profile, user in rows:
+        items.append({
+            "id": str(profile.id),
+            "user_id": str(user.id),
+            "name": f"{getattr(user, 'first_name', '')} {getattr(user, 'last_name', '')}".strip() or user.username,
+            "email": user.email,
+            "license_number": profile.license_number,
+            "license_picture_url": profile.license_picture_url,
+            "license_status": profile.license_status.upper(),
+            "submitted_at": profile.updated_at.strftime("%d/%m/%Y") if profile.updated_at else "—",
+        })
+        
+    pending_count = (await db.execute(select(func.count()).select_from(DriverProfile).where(DriverProfile.license_number != None).where(DriverProfile.license_status == "pending"))).scalar() or 0
+    verified_count = (await db.execute(select(func.count()).select_from(DriverProfile).where(DriverProfile.license_number != None).where(DriverProfile.license_status == "verified"))).scalar() or 0
+    rejected_count = (await db.execute(select(func.count()).select_from(DriverProfile).where(DriverProfile.license_number != None).where(DriverProfile.license_status == "rejected"))).scalar() or 0
+    
+    return {
+        "items": items,
+        "total": total,
+        "summary": {
+            "pending": pending_count,
+            "verified": verified_count,
+            "rejected": rejected_count
+        }
+    }
+
+
+@router.get("/admin-drivers/licenses/{driver_id}")
+async def get_admin_driver_license_detail(driver_id: str, db: AsyncSession = Depends(get_session)):
+    """Get details of a single driver license application."""
+    from app.models.driving import DriverProfile
+    from app.models.user import Users
+    from sqlmodel import select
+    
+    try:
+        did = uuid.UUID(driver_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid driver_id")
+        
+    stmt = select(DriverProfile, Users).join(Users, DriverProfile.user_id == Users.id).where(DriverProfile.id == did)
+    res = await db.execute(stmt)
+    result = res.all()
+    if not result:
+        raise HTTPException(status_code=404, detail="Driver profile not found")
+        
+    profile, user = result[0]
+    
+    return {
+        "id": str(profile.id),
+        "user_id": str(user.id),
+        "name": f"{getattr(user, 'first_name', '')} {getattr(user, 'last_name', '')}".strip() or user.username,
+        "email": user.email,
+        "license_number": profile.license_number,
+        "license_picture_url": profile.license_picture_url,
+        "car_picture_url": profile.car_picture_url,
+        "car_name": profile.car_name,
+        "car_model": profile.car_model,
+        "plate_number": profile.plate_number,
+        "vehicle_type": profile.vehicle_type,
+        "license_status": profile.license_status.upper(),
+        "license_rejection_reason": profile.license_rejection_reason,
+        "submitted_at": profile.updated_at.isoformat() if profile.updated_at else None,
+        "personal_info": {
+            "phone": getattr(user, "phone", "—"),
+            "car_name": profile.car_name,
+            "car_model": profile.car_model,
+            "plate_number": profile.plate_number,
+            "vehicle_type": profile.vehicle_type,
+        }
+    }
+
+
+@router.post("/admin-drivers/licenses/{driver_id}/review")
+async def review_admin_driver_license(driver_id: str, req: Request, db: AsyncSession = Depends(get_session)):
+    """Approve or reject a driver license application."""
+    from app.models.driving import DriverProfile, DriverStatus
+    from sqlmodel import select
+    
+    try:
+        did = uuid.UUID(driver_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid driver_id")
+        
+    body = await req.json()
+    action = body.get("action", "").lower()
+    reason = body.get("reason") or body.get("rejection_reason", "")
+    
+    res = await db.execute(select(DriverProfile).where(DriverProfile.id == did))
+    profile = res.scalar_one_or_none()
+    if not profile:
+        raise HTTPException(status_code=404, detail="Driver profile not found")
+        
+    if action == "approve":
+        profile.license_status = "verified"
+        profile.status = DriverStatus.ACTIVE
+        profile.license_rejection_reason = None
+    elif action == "reject":
+        profile.license_status = "rejected"
+        profile.status = DriverStatus.PENDING
+        profile.license_rejection_reason = reason
+    else:
+        raise HTTPException(status_code=400, detail="Invalid action. Use 'approve' or 'reject'")
+        
+    db.add(profile)
+    await db.commit()
+    return {"message": f"Driver license {action}d successfully", "status": profile.license_status.upper()}
+
+
 @router.get("/admin-drivers/{driver_id}")
 async def get_admin_driver_detail(driver_id: str, db: AsyncSession = Depends(get_session)):
     """Return driver profile detail."""
@@ -1189,6 +1349,8 @@ async def review_admin_kyc(user_id: str, req: Request, db: AsyncSession = Depend
     kyc.reviewed_at = datetime.now(timezone.utc)
     await db.commit()
     return {"message": f"KYC {action}d successfully", "status": kyc.status.value.upper()}
+
+
 
 
 # ──────────────────────────────────────────────
@@ -1998,4 +2160,122 @@ async def get_platform_revenue(
             "total_today_formatted": f"₦{total_today / 100:,.2f}",
         }
     }
+
+
+# ──────────────────────────────────────────────
+#  ADMIN-FACING POSTED JOBS MANAGEMENT ENDPOINTS
+# ──────────────────────────────────────────────
+
+@router.get("/admin-posted-jobs")
+async def list_admin_posted_jobs(
+    search: Optional[str] = None,
+    status: Optional[str] = None,
+    page: int = 1,
+    limit: int = 50,
+    db: AsyncSession = Depends(get_session),
+):
+    """Return paginated list of all posted jobs on the platform."""
+    from app.models.posted_job import PostedJob, PostedJobStatus
+    from app.models.user import Users
+    from app.models.services import ServiceCategory
+    from sqlmodel import select, func
+    from sqlalchemy.orm import selectinload
+
+    stmt = select(PostedJob).options(selectinload(PostedJob.user), selectinload(PostedJob.category))
+    if search:
+        stmt = stmt.where(
+            (PostedJob.title.ilike(f"%{search}%")) | (PostedJob.description.ilike(f"%{search}%"))
+        )
+    if status:
+        try:
+            stmt = stmt.where(PostedJob.status == PostedJobStatus(status.lower()))
+        except Exception:
+            pass
+
+    total_res = await db.execute(select(func.count()).select_from(stmt.subquery()))
+    total = total_res.scalar() or 0
+
+    stmt = stmt.order_by(PostedJob.created_at.desc()).offset((page - 1) * limit).limit(limit)
+    result = await db.execute(stmt)
+    jobs = result.scalars().all()
+
+    rows = []
+    for j in jobs:
+        # count bid negotiations
+        from app.models.price_negotiation import PriceNegotiation
+        bid_res = await db.execute(
+            select(func.count()).select_from(PriceNegotiation).where(PriceNegotiation.posted_job_id == j.id)
+        )
+        bid_count = bid_res.scalar() or 0
+
+        rows.append({
+            "id": str(j.id),
+            "title": j.title,
+            "description": j.description,
+            "user_id": str(j.user_id),
+            "username": j.user.username if j.user else "Anonymous",
+            "category": j.category.name if j.category else "General",
+            "min_price": j.min_price_cents / 100.0,
+            "max_price": j.max_price_cents / 100.0,
+            "min_price_formatted": f"₦{j.min_price_cents / 100:,.2f}",
+            "max_price_formatted": f"₦{j.max_price_cents / 100:,.2f}",
+            "status": j.status.value.upper() if hasattr(j.status, "value") else str(j.status).upper(),
+            "listed": j.created_at.strftime("%d/%m/%Y") if j.created_at else "",
+            "created_at_iso": j.created_at.isoformat() if j.created_at else "",
+            "bid_count": bid_count,
+        })
+
+    return {"posted_jobs": rows, "total": total, "page": page, "limit": limit}
+
+
+@router.post("/posted-jobs/status")
+async def change_posted_job_status(
+    request: Request,
+    job_id: Optional[str] = Form(None),
+    status: Optional[str] = Form(None),
+    db: AsyncSession = Depends(get_session)
+):
+    from app.models.posted_job import PostedJob, PostedJobStatus
+    from sqlmodel import select
+
+    if not job_id or not status:
+        try:
+            body = await request.json()
+            job_id = job_id or body.get("job_id") or body.get("jobId")
+            status = status or body.get("status")
+        except Exception:
+            pass
+
+    if not job_id or not status:
+        raise HTTPException(status_code=400, detail="Missing job_id or status")
+
+    try:
+        job_uuid = uuid.UUID(job_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid job_id format")
+
+    stmt = select(PostedJob).where(PostedJob.id == job_uuid)
+    res = await db.execute(stmt)
+    job = res.scalar_one_or_none()
+    if not job:
+        raise HTTPException(status_code=404, detail="Posted job not found")
+
+    if status.upper() == "DELETE":
+        await db.delete(job)
+        await db.commit()
+        return {"message": "Posted job deleted successfully"}
+
+    try:
+        # Status can be open, assigned, completed, cancelled
+        stat_lower = status.lower()
+        if stat_lower in [s.value for s in PostedJobStatus]:
+            job.status = PostedJobStatus(stat_lower)
+            await db.commit()
+            await db.refresh(job)
+            return {"message": "Status updated successfully", "status": job.status.value.upper()}
+        else:
+            raise HTTPException(status_code=400, detail=f"Invalid status: {status}")
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
 

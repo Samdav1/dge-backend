@@ -1,6 +1,6 @@
 from .team import TeamUsers, Teams, TeamMembership
 from .user import Users, Locations, Admin, RefreshToken
-from .driving import DriverProfile, Ride, DriverLocation, Trip, TripStatus, RideStatus
+from .driving import DriverProfile, Ride, DriverLocation, Trip, TripStatus, RideStatus, DriverVehicle
 from .profile import Profile
 from .kyc import KYC
 from .escrow import Escrow
@@ -73,4 +73,5 @@ __all__ = [
     "FeeType",
     "PlatformFeeConfig",
     "PlatformRevenueLog",
+    "DriverVehicle",
 ]

@@ -216,12 +216,16 @@ class MonnifyService:
     # ──────────────────────────────────────────────────────────────────────────
 
     async def get_transaction_status(self, payment_reference: str) -> dict:
-        """Poll Monnify for current status of a collection transaction."""
+        """
+        Poll Monnify for current status of a collection transaction.
+        Uses the v2 query endpoint with paymentReference as a query param.
+        Docs: https://developers.monnify.com/
+        """
         headers = await self._auth_headers()
-        encoded_ref = base64.b64encode(payment_reference.encode()).decode()
         async with httpx.AsyncClient() as client:
             resp = await client.get(
-                f"{self.base_url}/api/v2/transactions/{encoded_ref}",
+                f"{self.base_url}/api/v2/merchant/transactions/query",
+                params={"paymentReference": payment_reference},
                 headers=headers,
                 timeout=15,
             )

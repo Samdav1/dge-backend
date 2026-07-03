@@ -1,6 +1,9 @@
 # app/api/v1/ws_chat.py
 import json
+import logging
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Depends, Query
+
+logger = logging.getLogger(__name__)
 
 from app.dependencies.admin_auth import get_current_user_ws
 from app.dependencies.socket_connection import ConnectionManager
@@ -23,10 +26,14 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(None), db:
     WebSocket endpoint. The client must connect with ?token=JWT or similar.
     After connection, client sends JSON with { action: 'join'|'leave'|'message'|'typing', ... }.
     """
+    logger.info("websocket_endpoint: Received connection request with token=%s...", token[:20] if token else "None")
     user = await get_current_user_ws(token=token, db=db)
     if not user:
+        logger.warning("websocket_endpoint: Authentication failed for token=%s...", token[:20] if token else "None")
         await websocket.close(code=1008)
         return
+    logger.info("websocket_endpoint: Authentication successful for user_id=%s, username=%s", user.id, user.username)
+
 
     user_id = str(user.id)
 
@@ -110,13 +117,31 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(None), db:
                 conv = payload.get("conversation_id")
                 channel_name = payload.get("channel_name")
                 if conv and channel_name:
+                    from app.models.profile import Profile
+                    from sqlmodel import select
+                    
+                    profile_stmt = select(Profile).where(Profile.user_id == user.id)
+                    profile_result = await db.exec(profile_stmt)
+                    profile = profile_result.first()
+                    
+                    caller_name = None
+                    caller_avatar = ""
+                    if profile:
+                        first = getattr(profile, "first_name", "") or ""
+                        last = getattr(profile, "last_name", "") or ""
+                        caller_name = f"{first} {last}".strip()
+                        caller_avatar = getattr(profile, "avatar_url", "") or ""
+                    
+                    if not caller_name:
+                        caller_name = getattr(user, "username", None) or str(user.id)
+
                     # Broadcast call invite to all participants in the conversation
                     invite_msg = {
                         "action": "call_invite",
                         "conversation_id": conv,
                         "channel_name": channel_name,
-                        "caller_name": getattr(user, "username", None) or str(user.id),
-                        "caller_avatar": "",
+                        "caller_name": caller_name,
+                        "caller_avatar": caller_avatar,
                         "user_id": user_id,
                     }
                     await manager.broadcast_conversation(str(conv), invite_msg)

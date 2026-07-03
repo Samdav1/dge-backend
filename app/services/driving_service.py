@@ -22,15 +22,35 @@ class DriverService:
         :param payload:
         :return:
         """
+        from app.models.kyc import KYC, KYCStatus
+        from sqlmodel import select
+
+        # Enforce KYC verification
+        stmt = select(KYC).where(KYC.user_id == user.id)
+        res = await self.repo.session.execute(stmt)
+        kyc = res.scalar_one_or_none()
+
+        if not kyc or kyc.status != KYCStatus.verified:
+            raise ValueError("User ID verification must be completed first.")
+
         existing_profile = await self.repo.get_by_user_id(user.id)
         if existing_profile:
             raise ValueError("User already has a driver profile.")
+
+        license_number = getattr(payload, "license_number", None)
+        license_picture_url = getattr(payload, "license_picture_url", None)
+        license_status = "pending" if (license_number and license_picture_url) else "unverified"
 
         new_driver = DriverProfile(
             user_id=user.id,
             car_name=payload.car_name,
             car_model=payload.car_model,
             plate_number=payload.plate_number,
+            vehicle_type=payload.vehicle_type or "car",
+            car_picture_url=payload.car_picture_url,
+            license_number=license_number,
+            license_picture_url=license_picture_url,
+            license_status=license_status,
         )
 
         return await self.repo.create(new_driver)
@@ -73,6 +93,15 @@ class DriverService:
             raise PermissionError("You cannot update another user's profile")
 
         update_data = payload.model_dump(exclude_unset=True)
+        
+        # Update license status if license fields are being changed
+        if "license_number" in update_data or "license_picture_url" in update_data:
+            val_number = update_data.get("license_number", current_profile.license_number)
+            val_pic = update_data.get("license_picture_url", current_profile.license_picture_url)
+            if val_number and val_pic:
+                current_profile.license_status = "pending"
+                current_profile.license_rejection_reason = None
+
         for key, value in update_data.items():
             setattr(current_profile, key, value)
 

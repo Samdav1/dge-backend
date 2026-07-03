@@ -155,6 +155,21 @@ async def deposit_webhook(
     return result
 
 
+@router.post("/deposit/verify/{deposit_id}", summary="Verify a deposit payment with Monnify")
+async def verify_deposit(
+    deposit_id: uuid.UUID,
+    db: AsyncSession = Depends(get_session),
+    credentials: UserRead = Depends(get_current_user),
+):
+    """
+    User-triggered verification: calls Monnify's transaction status API
+    to check if payment was completed, then credits the wallet automatically.
+    Use this after returning from the Monnify checkout page.
+    """
+    result = await payment_service.verify_deposit(db, deposit_id, credentials.id)
+    return result
+
+
 @router.get("/deposit/history", response_model=List[DepositRead], summary="Get deposit history")
 async def get_deposit_history(
     db: AsyncSession = Depends(get_session),

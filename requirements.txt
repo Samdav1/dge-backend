@@ -27,3 +27,5 @@ aiofiles~=24.1.0
 rabbitmq==0.2.0
 celery
 agora-token-builder
+google-auth
+psycopg2-binary==2.9.10

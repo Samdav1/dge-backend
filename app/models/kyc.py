@@ -46,6 +46,8 @@ class KYC(SQLModel, table=True):
     reviewed_by_id: Optional[uuid.UUID] = Field(default=None, foreign_key="teamusers.id")
     submitted_at: Optional[datetime] = Field(default=None, sa_column=Column(DateTime(timezone=True)))
     reviewed_at: Optional[datetime] = Field(default=None, sa_column=Column(DateTime(timezone=True)))
+    metamap_verification_id: Optional[str] = Field(default=None, nullable=True)
+    metamap_flow_id: Optional[str] = Field(default=None, nullable=True)
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),
         sa_column=Column(DateTime(timezone=True),

@@ -177,15 +177,36 @@ class ConversationParticipantRepository:
         refined_participant = ConversationParticipantRead.model_validate(participant_dict)
         return refined_participant
 
-    async def get_participants_by_conversation(self, conversation_id: UUID) -> list[ConversationParticipant]:
+    async def get_participants_by_conversation(self, conversation_id: UUID) -> list[dict]:
         """
 
         :param conversation_id:
         :return:
         """
-        statement = select(ConversationParticipant).where(ConversationParticipant.conversation_id == conversation_id)
+        from app.models.user import Users
+        from app.models.profile import Profile
+        statement = (
+            select(ConversationParticipant, Users.username, Profile.avatar_url)
+            .outerjoin(Users, ConversationParticipant.user_id == Users.id)
+            .outerjoin(Profile, Users.id == Profile.user_id)
+            .where(ConversationParticipant.conversation_id == conversation_id)
+        )
         result = await self.db.exec(statement)
-        return result.all()
+        rows = result.all()
+        
+        output = []
+        for p, username, avatar_url in rows:
+            output.append({
+                "id": p.id,
+                "conversation_id": p.conversation_id,
+                "user_id": p.user_id,
+                "joined_at": p.joined_at,
+                "left_at": p.left_at,
+                "role": p.role,
+                "username": username or "User",
+                "avatar_url": avatar_url,
+            })
+        return output
 
     async def check_negotiation_existence(self, user_id: UUID, recipient_id: UUID, db: AsyncSession):
         """

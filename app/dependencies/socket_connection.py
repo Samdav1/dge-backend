@@ -189,7 +189,11 @@ class ConnectionManager:
     async def send_to_user(self, user_id: str, message_obj: dict):
         sockets = await self.get_user_sockets(user_id)
         if not sockets:
+            logger.warning("send_to_user: No active sockets for user_id=%s (connected users: %s), message type=%s",
+                         user_id, list(self.user_sockets.keys()), message_obj.get('type', 'unknown'))
             return
+        logger.info("send_to_user: Sending '%s' to user_id=%s (%d sockets)",
+                   message_obj.get('type', 'unknown'), user_id, len(sockets))
         text = json.dumps(message_obj)
         coros = [ws.send_text(text) for ws in list(sockets)]
         await asyncio.gather(*coros, return_exceptions=True)
@@ -238,4 +242,4 @@ class ConnectionManager:
     async def list_local_users(self) -> Set[str]:
         return set(self.user_sockets.keys())
 
-manager = ConnectionManager(redis_url="redis://localhost:6379/0")
+manager = ConnectionManager()

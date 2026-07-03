@@ -7,7 +7,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from sqlalchemy.orm import selectinload, joinedload
 
 from app.models import Users
-from app.models.services import Service, ServiceCategoryLink, ServiceStatus
+from app.models.services import Service, ServiceCategoryLink, ServiceStatus, ServiceCategory
 from app.schemas.user import UserRead
 
 
@@ -64,10 +64,8 @@ class ServiceRepository:
             q = q.where(Service.user_id == user_id)
         if status:
             q = q.where(Service.status == status)
-
-        # Marketplace view: exclude drafts if not viewing own services
-        if not user_id:
-            q = q.where(Service.status != ServiceStatus.draft)
+        elif not user_id:
+            q = q.where(Service.status == ServiceStatus.approved)
 
         if type:
             q = q.where(Service.type == type)
@@ -117,21 +115,24 @@ class ServiceRepository:
 
     async def update(self, service: Service, category_ids: Optional[List[uuid.UUID]] = None) -> Service:
         self.session.add(service)
-        await self.session.commit()
-        await self.session.refresh(service)
 
         if category_ids is not None:
             # delete old links
             q = select(ServiceCategoryLink).where(ServiceCategoryLink.service_id == service.id)
-            links = await self.session.exec(q).scalars().all()
+            result = await self.session.exec(q)
+            links = result.all()
             for link in links:
                 await self.session.delete(link)
-            await self.session.commit()
 
             # add new links
             for cid in category_ids:
                 self.session.add(ServiceCategoryLink(service_id=service.id, category_id=cid))
-            await self.session.commit()
+
+        await self.session.commit()
+        await self.session.refresh(service)
+
+        if category_ids is not None:
+            self.session.expire(service, ['categories'])
 
         # return re-fetched service with categories
         q2 = select(Service).where(Service.id == service.id).options(selectinload(Service.categories))

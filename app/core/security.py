@@ -9,12 +9,39 @@ from fastapi import Depends, HTTPException
 
 api_key_header = APIKeyHeader(name="token")
 
-PRIVATE_KEY = Path("./../jwt_private.pem").read_text()
-PUBLIC_KEY = Path("./../jwt_public.pem").read_text()
-REFRESH_PRIVATE_KEY = Path("./../jwt_refresh_private.pem").read_text()
-REFRESH_PUBLIC_KEY = Path("./../jwt_refresh_public.pem").read_text()
-
 load_dotenv()
+
+BASE_DIR = Path(__file__).resolve().parent.parent.parent
+
+def _load_key_from_env_or_file(env_var: str, filename: str, fallback_env_var: str = None, fallback_filename: str = None) -> str:
+    # 1. Try primary env var
+    value = os.getenv(env_var)
+    if not value and fallback_env_var:
+        # 2. Try fallback env var
+        value = os.getenv(fallback_env_var)
+        
+    if value:
+        # Standardize newlines (replace literal '\n' sequences with real newlines)
+        return value.replace("\\n", "\n").strip('"\'')
+        
+    # 3. Try primary file path
+    path = BASE_DIR / filename
+    if path.exists():
+        return path.read_text()
+        
+    # 4. Try fallback file path
+    if fallback_filename:
+        fallback_path = BASE_DIR / fallback_filename
+        if fallback_path.exists():
+            return fallback_path.read_text()
+            
+    raise FileNotFoundError(f"Key not found in env ({env_var}) or file ({filename}).")
+
+PRIVATE_KEY = _load_key_from_env_or_file("JWT_PRIVATE_KEY", "jwt_private.pem")
+PUBLIC_KEY = _load_key_from_env_or_file("JWT_PUBLIC_KEY", "jwt_public.pem")
+REFRESH_PRIVATE_KEY = _load_key_from_env_or_file("JWT_REFRESH_PRIVATE_KEY", "jwt_refresh_private.pem", fallback_env_var="JWT_PRIVATE_KEY", fallback_filename="jwt_private.pem")
+REFRESH_PUBLIC_KEY = _load_key_from_env_or_file("JWT_REFRESH_PUBLIC_KEY", "jwt_refresh_public.pem", fallback_env_var="JWT_PUBLIC_KEY", fallback_filename="jwt_public.pem")
+
 
 ALGORITHM = os.getenv("ALGORITHM")
 TOKEN_EXPIRATION_TIME = os.getenv("ACCESS_TOKEN_EXPIRE_MINUTE")

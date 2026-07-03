@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Optional, List
 from sqlalchemy import Column, String, Integer, TIMESTAMP, func, Float, DateTime, Boolean, Enum as SAEnum
 from sqlmodel import SQLModel, Field, Relationship
 import enum
@@ -35,6 +35,8 @@ class DriverProfile(SQLModel, table=True):
     car_name: str = Field(max_length=255, nullable=False)
     car_model: str = Field(max_length=255, nullable=False)
     plate_number: str = Field(max_length=255, nullable=True)
+    vehicle_type: str = Field(default="car", max_length=50, nullable=False)
+    car_picture_url: Optional[str] = Field(default=None, max_length=500, nullable=True)
 
     successful_rides: int = Field(default=0, nullable=False)
     total_rides: int = Field(default=0, nullable=False)
@@ -42,6 +44,11 @@ class DriverProfile(SQLModel, table=True):
 
     rank: DriverRank = Field(default=DriverRank.STARTER, nullable=False)
     status: DriverStatus = Field(default=DriverStatus.PENDING, nullable=False)
+
+    license_number: Optional[str] = Field(default=None, max_length=255, nullable=True)
+    license_picture_url: Optional[str] = Field(default=None, max_length=500, nullable=True)
+    license_status: str = Field(default="unverified", max_length=50, nullable=False)
+    license_rejection_reason: Optional[str] = Field(default=None, max_length=500, nullable=True)
 
     created_at: datetime = Field(
         sa_column=Column(
@@ -61,6 +68,32 @@ class DriverProfile(SQLModel, table=True):
     )
 
     user: "Users" = Relationship(back_populates="driver_profile")
+    vehicles: List["DriverVehicle"] = Relationship(back_populates="driver", sa_relationship_kwargs={"cascade": "all, delete-orphan"})
+
+
+class DriverVehicle(SQLModel, table=True):
+    __tablename__ = "driver_vehicles"
+
+    id: uuid.UUID = Field(
+        default_factory=uuid.uuid4,
+        primary_key=True,
+        index=True,
+        nullable=False,
+    )
+    driver_id: uuid.UUID = Field(foreign_key="driver_profiles.id", index=True, nullable=False)
+    vehicle_type: str = Field(max_length=50, nullable=False)  # car, van, truck, bike, tricycle
+    license_number: str = Field(max_length=255, nullable=False)
+    picture_url: Optional[str] = Field(default=None, max_length=500, nullable=True)
+    is_verified: bool = Field(default=False, nullable=False)
+    created_at: datetime = Field(
+        sa_column=Column(
+            TIMESTAMP(timezone=True),
+            nullable=False,
+            server_default=func.now()
+        )
+    )
+
+    driver: "DriverProfile" = Relationship(back_populates="vehicles")
 
 
 # ---------------------------------------------------------------------------
@@ -170,6 +203,7 @@ class Trip(SQLModel, table=True):
     surge_multiplier: float = Field(
         default=1.0, sa_column=Column(Float, nullable=False, server_default="1.0")
     )
+    vehicle_type: str = Field(default="car", max_length=50, nullable=False)
 
     # State machine
     status: TripStatus = Field(default=TripStatus.PENDING, nullable=False)

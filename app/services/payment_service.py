@@ -305,6 +305,73 @@ async def _credit_wallet_for_deposit(db: AsyncSession, deposit: DepositRequest) 
             logger.error(f"Failed to send deposit email: {e}")
 
 
+async def verify_deposit(db: AsyncSession, deposit_id: uuid.UUID, user_id: uuid.UUID) -> dict:
+    """
+    User-triggered deposit verification.
+    Polls Monnify's transaction status API to check if the payment was completed,
+    then credits the wallet if it was. This is the primary crediting path since
+    Monnify webhooks may not reach the server on cPanel deployments.
+    """
+    stmt = select(DepositRequest).where(
+        DepositRequest.id == deposit_id,
+        DepositRequest.user_id == user_id,
+    )
+    res = await db.execute(stmt)
+    deposit = res.scalar_one_or_none()
+
+    if not deposit:
+        raise HTTPException(status_code=404, detail="Deposit not found")
+
+    # Already credited — nothing to do
+    if deposit.status in (DepositStatus.approved, DepositStatus.confirmed):
+        return {"verified": True, "status": deposit.status.value, "message": "Deposit already credited"}
+
+    if not deposit.monnify_reference:
+        raise HTTPException(status_code=400, detail="No Monnify reference for this deposit")
+
+    # Query Monnify for the real payment status
+    try:
+        txn_data = await monnify_service.get_transaction_status(deposit.monnify_reference)
+    except Exception as e:
+        logger.error(f"Monnify verification failed for {deposit.monnify_reference}: {e}")
+        raise HTTPException(status_code=502, detail=f"Could not verify with Monnify: {str(e)}")
+
+    payment_status = txn_data.get("paymentStatus", "")
+    logger.info(f"Monnify verification for {deposit.monnify_reference}: paymentStatus={payment_status}")
+
+    if payment_status not in ("PAID", "OVERPAID"):
+        return {
+            "verified": False,
+            "status": payment_status,
+            "message": f"Payment not yet completed (status: {payment_status})",
+        }
+
+    # Payment confirmed — credit the wallet
+    deposit.metadata_json = json.dumps(txn_data)
+    deposit.updated_at = datetime.now(timezone.utc)
+
+    settings = await get_payment_settings(db)
+
+    if settings.screen_deposits:
+        deposit.status = DepositStatus.screened_pending
+        db.add(deposit)
+        await db.commit()
+        return {
+            "verified": True,
+            "status": "screened_pending",
+            "message": "Payment confirmed. Your deposit is pending admin review.",
+        }
+    else:
+        deposit.status = DepositStatus.confirmed
+        db.add(deposit)
+        await _credit_wallet_for_deposit(db, deposit)
+        return {
+            "verified": True,
+            "status": "approved",
+            "message": "Payment confirmed! Your wallet has been credited.",
+        }
+
+
 async def admin_approve_deposit(
     db: AsyncSession,
     deposit_id: uuid.UUID,

@@ -28,15 +28,10 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
-# Reuse the same RSA public key used by the rest of the app
-_PUBLIC_KEY: Optional[str] = None
-
+from app.core.security import PUBLIC_KEY
 
 def _get_public_key() -> str:
-    global _PUBLIC_KEY
-    if _PUBLIC_KEY is None:
-        _PUBLIC_KEY = Path("jwt_public.pem").read_text()
-    return _PUBLIC_KEY
+    return PUBLIC_KEY
 
 
 def _decode_token(token: str) -> Optional[str]:

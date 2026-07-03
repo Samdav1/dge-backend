@@ -26,6 +26,8 @@ class ConversationParticipantRead(ConversationParticipantBase):
     id: uuid.UUID
     joined_at: datetime
     left_at: Optional[datetime] = None
+    username: Optional[str] = None
+    avatar_url: Optional[str] = None
 
     model_config = ConfigDict(from_attributes=True)
 class ConversationBase(BaseModel):
