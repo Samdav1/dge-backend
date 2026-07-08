@@ -12,7 +12,7 @@ from app.schemas.price_negotiation import (
 )
 from app.services.price_negotiation_service import PriceNegotiationService
 from app.repositories.price_negotiation_repo import PriceNegotiationRepository
-from app.dependencies.auth import get_current_user
+from app.dependencies.auth import get_current_user, verify_user_kyc
 from app.schemas.user import UserRead
 
 router = APIRouter()
@@ -27,7 +27,7 @@ class JobBidCreate(BaseModel):
 @router.post("/", response_model=PriceNegotiationRead)
 async def create_negotiation(
     payload: PriceNegotiationCreate,
-    user: UserRead = Depends(get_current_user),
+    user: UserRead = Depends(verify_user_kyc),
     db: AsyncSession = Depends(get_session)
 ):
     service = PriceNegotiationService(PriceNegotiationRepository(db))
@@ -37,7 +37,7 @@ async def create_negotiation(
 async def bid_on_posted_job(
     job_id: uuid.UUID,
     payload: JobBidCreate,
-    user: UserRead = Depends(get_current_user),
+    user: UserRead = Depends(verify_user_kyc),
     db: AsyncSession = Depends(get_session),
 ):
     """Submit a bid on a posted job. Bidder must own the specified service."""

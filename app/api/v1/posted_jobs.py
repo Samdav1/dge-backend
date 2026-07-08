@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.db.session import get_session
-from app.dependencies.auth import get_current_user
+from app.dependencies.auth import get_current_user, verify_user_kyc
 from app.schemas.posted_job import PostedJobCreate, PostedJobRead, PostedJobUpdate
 from app.schemas.price_negotiation import PriceNegotiationRead, PriceNegotiationCreate
 from app.schemas.user import UserRead
@@ -22,7 +22,7 @@ def get_service(db: AsyncSession = Depends(get_session)) -> PostedJobService:
 @router.post("/", response_model=PostedJobRead)
 async def create_posted_job(
     payload: PostedJobCreate,
-    user: UserRead = Depends(get_current_user),
+    user: UserRead = Depends(verify_user_kyc),
     service: PostedJobService = Depends(get_service),
 ):
     """Post a new help request / job. Requires wallet balance >= max_price_cents."""

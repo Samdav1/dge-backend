@@ -133,3 +133,21 @@ async def get_current_user(
         except Exception as exc:
             print(f"DEBUG AUTH: Auto-refresh failed: {str(exc)}")
             raise HTTPException(status_code=401, detail="Session expired, please login again")
+
+async def verify_user_kyc(
+    current_user: UserRead = Depends(get_current_user),
+    db: AsyncSession = Depends(get_session),
+):
+    if getattr(current_user, "is_admin", False):
+        return current_user
+    
+    from app.services.kyc_service import get_user_kyc_service
+    from app.models.kyc import KYCStatus
+
+    kyc = await get_user_kyc_service(db, current_user.id)
+    if not kyc or kyc.status != KYCStatus.verified:
+        raise HTTPException(
+            status_code=403,
+            detail="KYC verification required to perform this action"
+        )
+    return current_user
