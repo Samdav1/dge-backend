@@ -81,5 +81,8 @@ else
     exit 1
 fi
 
+echo "adding super admin"
+python3 add_superadmin.py
+
 echo "Starting Uvicorn..."
 exec uvicorn app.main:app --host 0.0.0.0 --port "${PORT:-8000}"

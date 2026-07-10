@@ -90,7 +90,7 @@ async def get_refresh_token(subject: str, data: Dict[str, Any] = None, expires_d
     to_encode = {"sub": subject}
     if data:
         to_encode.update(data)
-    expires = datetime.now(timezone.utc) + (expires_delta or timedelta(minutes=int(LONG_TOKEN_EXPIRATION_TIME)))
+    expires = datetime.now(timezone.utc) + (expires_delta or timedelta(days=int(LONG_TOKEN_EXPIRATION_TIME)))
     to_encode.update({"exp": expires})
     return jwt.encode(to_encode, REFRESH_PRIVATE_KEY, algorithm=ALGORITHM)
 
