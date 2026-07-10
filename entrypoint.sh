@@ -26,7 +26,7 @@ asyncio.run(check())
 "
 # Seed service categories
 echo "Seeding service categories..."
-python seed_categories.py
+python seed_categories.py || echo "Warning: seed_categories.py failed (non-fatal, continuing...)"
 
 # Run Alembic database migrations
 # If alembic_version table doesn't exist or is empty, the database was set up
@@ -82,7 +82,7 @@ else
 fi
 
 echo "adding super admin"
-python3 add_superadmin.py
+python3 add_superadmin.py || echo "Warning: add_superadmin.py failed (non-fatal, continuing...)"
 
 echo "Starting Uvicorn..."
 exec uvicorn app.main:app --host 0.0.0.0 --port "${PORT:-8000}"
