@@ -33,24 +33,25 @@ asyncio.run(check())
 echo "Running database migrations..."
 
 # ALEMBIC_HEAD = latest revision ID — update this when adding new migrations
+set +e
 python - <<'PYEOF'
 import sys, os
-from sqlalchemy import create_engine, text, inspector
-
-ALEMBIC_HEAD = "9c44495f2803"
-
-db_uri = os.getenv('DB_URI', '')
-if not db_uri:
-    print("WARNING: No DB_URI found, skipping migration check.")
-    sys.exit(3)
-
-if 'asyncpg' in db_uri:
-    db_uri = db_uri.replace('postgresql+asyncpg', 'postgresql+psycopg2')
 
 try:
+    from sqlalchemy import create_engine, text, inspect
+
+    ALEMBIC_HEAD = "9c44495f2803"
+
+    db_uri = os.getenv('DB_URI', '')
+    if not db_uri:
+        print("WARNING: No DB_URI found, skipping migration check.")
+        sys.exit(3)
+
+    if 'asyncpg' in db_uri:
+        db_uri = db_uri.replace('postgresql+asyncpg', 'postgresql+psycopg2')
+
     engine = create_engine(db_uri)
     with engine.connect() as conn:
-        from sqlalchemy import inspect
         inspector = inspect(engine)
         tables = inspector.get_table_names()
         if 'alembic_version' not in tables:
@@ -76,6 +77,7 @@ except Exception as e:
     sys.exit(3)
 PYEOF
 MIGRATION_STATUS=$?
+set -e
 
 if [ "$MIGRATION_STATUS" -eq 0 ]; then
     echo "Upgrading database to latest migration..."
@@ -87,4 +89,4 @@ else
 fi
 
 echo "Starting Uvicorn..."
-exec uvicorn app.main:app --host 0.0.0.0 --port $PORT
+exec uvicorn app.main:app --host 0.0.0.0 --port "$PORT"
