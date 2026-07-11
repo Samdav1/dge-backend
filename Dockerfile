@@ -5,7 +5,7 @@ WORKDIR /app
 
 # Copy and install python dependencies (pulls pre-compiled binary wheels)
 COPY requirements.txt .
-RUN pip install --default-timeout=1000 --no-cache-dir --prefix=/install -r requirements.txt
+RUN pip install --default-timeout=2000 --no-cache-dir --prefix=/install -r requirements.txt
 
 # Stage 2: Runtime image
 FROM --platform=linux/amd64 python:3.12-slim
@@ -27,7 +27,7 @@ COPY . .
 RUN chmod +x /app/entrypoint.sh
 
 # Expose ports for FastAPI (HTTP and WebSockets both go through port 8000)
-EXPOSE 8000
+EXPOSE ${PORT}
 
 # Set environment variables
 ENV PYTHONUNBUFFERED=1
