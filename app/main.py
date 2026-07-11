@@ -11,6 +11,7 @@ from app.dependencies.socket_connection import ConnectionManager, manager
 from app.middlewares.auth_middleware import AuthMiddleware
 
 import os
+import asyncio
 import logging
 
 base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -38,6 +39,24 @@ async def lifespan(app: FastAPI):
     await manager.start()
     print("✅ Managers started and Redis connected")
 
+    # Run seeding and superadmin in background (non-blocking)
+    # so uvicorn can bind to port 8000 immediately for health checks
+    async def _background_setup():
+        try:
+            from seed_categories import seed
+            await seed()
+            print("✅ Categories seeded")
+        except Exception as e:
+            print(f"⚠️  Seeding failed (non-fatal): {e}")
+        try:
+            from add_superadmin import add_admin
+            await add_admin()
+            print("✅ Superadmin ensured")
+        except Exception as e:
+            print(f"⚠️  Superadmin insert failed (non-fatal): {e}")
+
+    asyncio.create_task(_background_setup())
+
     yield
 
     await manager.stop()
@@ -63,4 +82,4 @@ async def root():
     return {"message": "Hello World"}
 
 if __name__ == "__main__":
-    uvicorn.run("app.main:app", host="0.0.0.0", port=8080, reload=True)
+    uvicorn.run("app.main:app", host="0.0.0.0", port=8000, reload=True)
