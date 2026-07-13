@@ -4,11 +4,12 @@ from fastapi import UploadFile, HTTPException
 from app.schemas.user import UserRead
 from app.schemas.work_submission import WorkSubmissionCreate, WorkSubmissionRead
 from app.repositories.work_submissions import WorkSubmissionRepository
-from app.dependencies.file_handler import save_avatar  # your file save utility
+from app.dependencies.file_handler import save_work_submission_file  # secure file save utility
+from app.models.work_submissions import WorkSubmission
 
 from sqlalchemy.future import select
 from sqlalchemy.orm import selectinload
-from app.models.escrow import Escrow
+from app.models.escrow import Escrow, EscrowStatus
 from app.models.wallet import Wallet
 from app.models.user import Users
 from app.services.email_notification_service import NotificationService
@@ -25,9 +26,28 @@ class WorkSubmissionService:
         files: Optional[UploadFile],
         user: UserRead
     ) -> WorkSubmissionRead:
-        # Save files (your save_avatar returns a URL or path)
-        image_url = await save_avatar(image) if image else None
-        file_url = await save_avatar(files) if files else None
+        # Check escrow status
+        q_escrow = select(Escrow).where(Escrow.id == submission_payload.escrow_id)
+        res_escrow = await self.repo.db.execute(q_escrow)
+        escrow = res_escrow.scalar_one_or_none()
+        if not escrow:
+            raise HTTPException(status_code=404, detail="Escrow not found.")
+        if escrow.status != EscrowStatus.held:
+            raise HTTPException(status_code=400, detail=f"Cannot submit work when escrow status is '{escrow.status.value}'.")
+
+        # Check if a submission already exists for this escrow
+        q_existing = select(WorkSubmission).where(WorkSubmission.escrow_id == submission_payload.escrow_id)
+        res_existing = await self.repo.db.execute(q_existing)
+        existing = res_existing.scalar_one_or_none()
+        if existing:
+            raise HTTPException(
+                status_code=400,
+                detail="Work has already been submitted for this job and is pending review."
+            )
+
+        # Save files using secure save_work_submission_file which runs virus scan
+        image_url = await save_work_submission_file(image, is_image=True) if image else None
+        file_url = await save_work_submission_file(files, is_image=False) if files else None
 
         # Start with payload dict and ensure we set user_id and override file/image urls
         data = submission_payload.model_dump()

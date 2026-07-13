@@ -67,6 +67,11 @@ class PriceNegotiation(SQLModel, table=True):
     escrow: 'Escrow' = Relationship(back_populates="price_negotiation")
     notifications: list['Notification'] = Relationship(back_populates="price_negotiation")
 
+    payment_method: Optional[str] = Field(
+        default="platform",
+        sa_column=Column(Text, nullable=True)
+    )
+
     posted_job_id: Optional[uuid.UUID] = Field(
         sa_column=Column(UUID(as_uuid=True), ForeignKey("posted_jobs.id"), nullable=True, index=True)
     )

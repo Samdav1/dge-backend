@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 from typing import List, Optional
 
 from sqlmodel import SQLModel, Field, Column, ForeignKey, Relationship
-from sqlalchemy import Enum, BigInteger, DateTime
+from sqlalchemy import Enum, BigInteger, DateTime, Text
 import enum
 
 
@@ -41,6 +41,10 @@ class Escrow(SQLModel, table=True):
     )
     status: EscrowStatus = Field(
         sa_column=Column(Enum(EscrowStatus, name="escrow_status_enum"), nullable=False, default=EscrowStatus.held)
+    )
+    payment_method: Optional[str] = Field(
+        default="platform",
+        sa_column=Column(Text, nullable=True)
     )
     payer_wallet: "Wallet" = Relationship(
         back_populates="escrows_as_payer",

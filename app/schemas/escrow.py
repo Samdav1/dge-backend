@@ -16,6 +16,7 @@ class EscrowCreate(BaseModel):
     payment_negotiation_id: uuid.UUID
     amount_cents: int = Field(..., ge=0)
     reference: Optional[str] = None
+    payment_method: Optional[str] = "platform"
 
 
 class EscrowActionPayload(BaseModel):
@@ -36,6 +37,7 @@ class EscrowRead(BaseModel):
     payee_wallet_id: uuid.UUID
     amount_cents: int
     status: EscrowStatusStr
+    payment_method: Optional[str] = "platform"
     created_at: datetime
     price_negotiation: Optional[PriceNegotiationRead] = None
     submissions: List[WorkSubmissionRead] = []

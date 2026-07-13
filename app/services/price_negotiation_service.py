@@ -72,6 +72,7 @@ class PriceNegotiationService:
             negotiation_type=NegotiationType.outgoing,
             proposed_price_cents=payload.proposed_price_cents,
             message=payload.message,
+            payment_method=payload.payment_method or "platform"
         )
 
         created_negotiation = await self.repo.create(negotiation_data)
@@ -200,6 +201,7 @@ class PriceNegotiationService:
                 payment_negotiation_id=negotiation_id,
                 amount_cents=negotiation.proposed_price_cents,
                 reference=tx_reference,
+                payment_method=payload.payment_method or negotiation.payment_method or "platform",
             )
             await escrow_service.create_escrow(user=user, payload=new_escrow)
 

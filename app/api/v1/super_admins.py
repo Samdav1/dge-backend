@@ -854,7 +854,7 @@ async def get_admin_user_reviews(user_id: str, db: AsyncSession = Depends(get_se
 @router.get("/admin-users/{user_id}/wallets")
 async def get_admin_user_wallets(user_id: str, db: AsyncSession = Depends(get_session)):
     """Return wallet balances for a user."""
-    from app.models.wallet import Wallet  # singular: wallet.py not wallets.py
+    from app.models.wallet import Wallet, WalletType
     from sqlmodel import select
     try:
         uid = uuid.UUID(user_id)
@@ -862,12 +862,29 @@ async def get_admin_user_wallets(user_id: str, db: AsyncSession = Depends(get_se
         raise HTTPException(status_code=400, detail="Invalid user_id")
 
     res = await db.execute(select(Wallet).where(Wallet.user_id == uid))
-    wallets = res.scalars().all()
+    wallets = list(res.scalars().all())
+
+    # Check/auto-create deposit wallet
+    has_deposit = any(w.wallet_type == WalletType.deposit for w in wallets)
+    if not has_deposit:
+        dep_wallet = Wallet(user_id=uid, wallet_type=WalletType.deposit, balance_cents=0, currency="NGN")
+        db.add(dep_wallet)
+        await db.commit()
+        wallets.append(dep_wallet)
+
+    # Check/auto-create earnings wallet
+    has_earnings = any(w.wallet_type == WalletType.earnings for w in wallets)
+    if not has_earnings:
+        earn_wallet = Wallet(user_id=uid, wallet_type=WalletType.earnings, balance_cents=0, currency="NGN")
+        db.add(earn_wallet)
+        await db.commit()
+        wallets.append(earn_wallet)
+
     return [
         {
             "id": str(w.id),
             "type": w.wallet_type.value if hasattr(w.wallet_type, "value") else str(w.wallet_type),
-            "balance": w.balance_cents,  # field is balance_cents, not balance
+            "balance": w.balance_cents,
         }
         for w in wallets
     ]
@@ -1336,7 +1353,18 @@ async def review_admin_kyc(user_id: str, req: Request, db: AsyncSession = Depend
     res = await db.execute(select(KYC).where(KYC.user_id == uid))
     kyc = res.scalar_one_or_none()
     if not kyc:
-        raise HTTPException(status_code=404, detail="KYC not found")
+        from app.models.user import Users
+        user_res = await db.execute(select(Users).where(Users.id == uid))
+        user_obj = user_res.scalar_one_or_none()
+        if not user_obj:
+            raise HTTPException(status_code=404, detail="User not found")
+        
+        kyc = KYC(
+            user_id=uid,
+            status=KYCStatus.unverified,
+            submitted_at=datetime.now(timezone.utc)
+        )
+        db.add(kyc)
         
     if action == "approve":
         kyc.status = KYCStatus.verified
