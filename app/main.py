@@ -9,6 +9,7 @@ from app.api.v1 import router as api_router
 from app.core.api_key import get_api_key
 from app.dependencies.socket_connection import ConnectionManager, manager
 from app.middlewares.auth_middleware import AuthMiddleware
+from dotenv import load_dotenv
 
 import os
 import asyncio
@@ -30,7 +31,7 @@ logging.getLogger("app.websocket_endpoints.chat_ws").setLevel(logging.DEBUG)
 logging.getLogger("app.websocket_endpoints.ride_ws").setLevel(logging.DEBUG)
 logging.getLogger("app.api.v1.drivers").setLevel(logging.DEBUG)
 
-
+load_dotenv()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
