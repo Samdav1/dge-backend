@@ -26,21 +26,16 @@ asyncio.run(check())
 "
 
 # Run Alembic database migrations (non-fatal warning on error)
-# If alembic_version table doesn't exist or is empty, the database was set up
-# by init_db()/create_all() without Alembic tracking.
-# Stamp via raw SQL (avoids full model import chain that alembic stamp triggers).
-# Then skip upgrade since schema is already current.
+# Inspect database schema to self-heal and stamp the database to the correct version matching existing tables/columns
+# This ensures that any missing/outdated columns are correctly upgraded on deploy.
 echo "Running database migrations..."
 
-# ALEMBIC_HEAD = latest revision ID — update this when adding new migrations
 set +e
 python - <<'PYEOF'
 import sys, os
 
 try:
     from sqlalchemy import create_engine, text, inspect
-
-    ALEMBIC_HEAD = "9c44495f2803"
 
     db_uri = os.getenv('DB_URI', '')
     if not db_uri:
@@ -53,27 +48,61 @@ try:
     engine = create_engine(db_uri)
     with engine.connect() as conn:
         inspector = inspect(engine)
-        tables = inspector.get_table_names()
-        if 'alembic_version' not in tables:
-            print('No alembic_version table — creating and stamping to head via SQL...')
-            conn.execute(text('CREATE TABLE alembic_version (version_num VARCHAR(32) NOT NULL, CONSTRAINT alembic_version_pkc PRIMARY KEY (version_num))'))
-            conn.execute(text("INSERT INTO alembic_version (version_num) VALUES (:v)"), {'v': ALEMBIC_HEAD})
-            conn.commit()
-            print(f"Stamped to {ALEMBIC_HEAD}")
-            sys.exit(2)  # signal: stamped, skip upgrade
-        else:
-            result = conn.execute(text('SELECT version_num FROM alembic_version')).fetchone()
-            if result is None:
-                print('alembic_version table empty — stamping to head via SQL...')
-                conn.execute(text("INSERT INTO alembic_version (version_num) VALUES (:v)"), {'v': ALEMBIC_HEAD})
+        table_names = inspector.get_table_names()
+        
+        # Define check functions for migrations in reverse chronological order
+        migrations = [
+            ("9c44495f2803", lambda insp: "users" in table_names and "identity_verified" in [c["name"] for c in insp.get_columns("users")]),
+            ("3d766d667485", lambda insp: "driver_vehicles" in table_names),
+            ("0c6aa91a55ea", lambda insp: "escrow" in table_names and "platform_fee_percent" in [c["name"] for c in insp.get_columns("escrow")]),
+            ("b0dfd279c5fe", lambda insp: "monnify_payments" in table_names),
+            ("e6a0809d47fe", lambda insp: "posted_jobs" in table_names),
+            ("76025a38eaa0", lambda insp: "escrow" in table_names and "duration_seconds" in [c["name"] for c in insp.get_columns("escrow")]),
+            ("a66c9cf4f6c7", lambda insp: "users" in table_names and "plate_number" in [c["name"] for c in insp.get_columns("users")]),
+            ("fa8ba665d169", lambda insp: "user_portfolio" in table_names and "rate" in [c["name"] for c in insp.get_columns("user_portfolio")]),
+            ("3940ece90f16", lambda insp: "kyc" in table_names and "value" in [c["name"] for c in insp.get_columns("kyc")]),
+            ("56c17be756f6", lambda insp: "users" in table_names and "google_id" in [c["name"] for c in insp.get_columns("users")]),
+            ("25416e912c15", lambda insp: "users" in table_names and "avatar" in [c["name"] for c in insp.get_columns("users")]),
+            ("260b77f76526", lambda insp: "services" in table_names and "price" in [c["name"] for c in insp.get_columns("services")]),
+            ("c782e9c35d27", lambda insp: "users" in table_names and "is_verified" in [c["name"] for c in insp.get_columns("users")]),
+            ("ab861dc01771", lambda insp: "transactions" in table_names and "users_id" in [c["name"] for c in insp.get_columns("transactions")]),
+        ]
+
+        # Determine actual database schema revision
+        detected_rev = None
+        for rev, check_fn in migrations:
+            try:
+                if check_fn(inspector):
+                    detected_rev = rev
+                    break
+            except Exception:
+                pass
+
+        # Check existing alembic_version table
+        has_alembic_table = "alembic_version" in table_names
+        current_rev = None
+        if has_alembic_table:
+            res = conn.execute(text("SELECT version_num FROM alembic_version")).fetchone()
+            if res:
+                current_rev = res[0]
+
+        print(f"Self-healing check: detected_rev={detected_rev}, current_rev={current_rev}")
+
+        if detected_rev != current_rev:
+            print(f"Updating database alembic_version from {current_rev} to {detected_rev}...")
+            if not has_alembic_table:
+                conn.execute(text("CREATE TABLE alembic_version (version_num VARCHAR(32) NOT NULL, CONSTRAINT alembic_version_pkc PRIMARY KEY (version_num))"))
                 conn.commit()
-                print(f"Stamped to {ALEMBIC_HEAD}")
-                sys.exit(2)  # signal: stamped, skip upgrade
-            else:
-                print(f"Alembic version found: {result[0]}")
-                sys.exit(0)  # signal: run upgrade
+            
+            conn.execute(text("DELETE FROM alembic_version"))
+            if detected_rev:
+                conn.execute(text("INSERT INTO alembic_version (version_num) VALUES (:v)"), {"v": detected_rev})
+            conn.commit()
+            print("Successfully updated database stamp to match detected state!")
+        
+        sys.exit(0) # Signal: run upgrade
 except Exception as e:
-    print(f"WARNING: Migration check failed with error: {e}")
+    print(f"WARNING: Self-healing database check failed with error: {e}")
     sys.exit(3)
 PYEOF
 MIGRATION_STATUS=$?
