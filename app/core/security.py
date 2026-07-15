@@ -13,29 +13,37 @@ load_dotenv()
 
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 
+import logging
+
+logger = logging.getLogger(__name__)
+
 def _load_key_from_env_or_file(env_var: str, filename: str, fallback_env_var: str = None, fallback_filename: str = None) -> str:
-    # 1. Try primary env var
-    value = os.getenv(env_var)
-    if not value and fallback_env_var:
-        # 2. Try fallback env var
-        value = os.getenv(fallback_env_var)
-        
-    if value:
-        # Standardize newlines (replace literal '\n' sequences with real newlines)
-        return value.replace("\\n", "\n").strip('"\'')
-        
-    # 3. Try primary file path
-    path = BASE_DIR / filename
-    if path.exists():
-        return path.read_text()
-        
-    # 4. Try fallback file path
-    if fallback_filename:
-        fallback_path = BASE_DIR / fallback_filename
-        if fallback_path.exists():
-            return fallback_path.read_text()
+    try:
+        # 1. Try primary env var
+        value = os.getenv(env_var)
+        if not value and fallback_env_var:
+            # 2. Try fallback env var
+            value = os.getenv(fallback_env_var)
             
-    raise FileNotFoundError(f"Key not found in env ({env_var}) or file ({filename}).")
+        if value:
+            # Standardize newlines (replace literal '\n' sequences with real newlines)
+            return value.replace("\\n", "\n").strip('"\'')
+            
+        # 3. Try primary file path
+        path = BASE_DIR / filename
+        if path.exists():
+            return path.read_text()
+            
+        # 4. Try fallback file path
+        if fallback_filename:
+            fallback_path = BASE_DIR / fallback_filename
+            if fallback_path.exists():
+                return fallback_path.read_text()
+                
+        raise FileNotFoundError(f"Key not found in env ({env_var}) or file ({filename}).")
+    except Exception as e:
+        logger.warning(f"⚠️ Security key warning: {e}. Please ensure env var {env_var} is set in production.")
+        return ""
 
 PRIVATE_KEY = _load_key_from_env_or_file("JWT_PRIVATE_KEY", "jwt_private.pem")
 PUBLIC_KEY = _load_key_from_env_or_file("JWT_PUBLIC_KEY", "jwt_public.pem")
