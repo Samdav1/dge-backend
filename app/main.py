@@ -36,13 +36,13 @@ load_dotenv()
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup logic
-    await init_db()
-    await manager.start()
-    print("✅ Managers started and Redis connected")
-
-    # Run seeding and superadmin in background (non-blocking)
-    # so uvicorn can bind to port 8000 immediately for health checks
+    # Run DB initialization and setup in the background so Uvicorn can bind to the port immediately
     async def _background_setup():
+        try:
+            await init_db()
+            print("✅ DB tables initialized/verified")
+        except Exception as e:
+            print(f"⚠️ DB init failed (non-fatal): {e}")
         try:
             from seed_categories import seed
             await seed()
@@ -56,6 +56,7 @@ async def lifespan(app: FastAPI):
         except Exception as e:
             print(f"⚠️  Superadmin insert failed (non-fatal): {e}")
 
+    await manager.start()
     asyncio.create_task(_background_setup())
 
     yield
@@ -83,6 +84,6 @@ async def root():
     return {"message": "Hello World"}
 
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 8001))
+    port = int(os.environ.get("PORT", 8000))
     print(f"🚀 Running on port {port}")
     uvicorn.run("app.main:app", host="0.0.0.0", port=port, reload=True)

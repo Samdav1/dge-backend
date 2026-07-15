@@ -63,11 +63,11 @@ class ConnectionManager:
     async def _redis_listener(self):
         """Subscribe to conversation:* and ride:* patterns and forward messages to local sockets."""
         assert self._redis is not None, "Redis client not started"
-        pubsub = self._redis.pubsub(ignore_subscribe_messages=True)
-        # Subscribe to both chat conversations and real-time ride rooms
-        await pubsub.psubscribe("conversation:*", "ride:*")
-        logger.info("Subscribed to Redis patterns: conversation:*, ride:*")
         try:
+            pubsub = self._redis.pubsub(ignore_subscribe_messages=True)
+            # Subscribe to both chat conversations and real-time ride rooms
+            await pubsub.psubscribe("conversation:*", "ride:*")
+            logger.info("Subscribed to Redis patterns: conversation:*, ride:*")
             async for message in pubsub.listen():
                 if message is None:
                     continue
@@ -107,6 +107,8 @@ class ConnectionManager:
                     logger.exception("Error handling pubsub message: %s", exc)
         except asyncio.CancelledError:
             logger.info("Redis listener cancelled")
+        except Exception as exc:
+            logger.error("Redis listener connection error: %s", exc)
         finally:
             try:
                 await pubsub.unsubscribe()

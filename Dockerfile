@@ -26,7 +26,11 @@ COPY . .
 # Make entrypoint script executable
 RUN chmod +x /app/entrypoint.sh
 
-# Expose ports for FastAPI (HTTP and WebSockets both go through port 8000)
+# Define port environment variable (default to 8000)
+ARG PORT=8000
+ENV PORT=${PORT}
+
+# Expose ports for FastAPI (HTTP and WebSockets both go through port 8000 by default)
 EXPOSE ${PORT}
 
 # Set environment variables

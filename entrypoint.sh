@@ -6,11 +6,11 @@ echo "Waiting for database connection..."
 python -c "
 import asyncio
 import sys
-from app.db.session import engine
 
 async def check():
     for i in range(15):
         try:
+            from app.db.session import engine
             async with asyncio.timeout(5.0):
                 async with engine.begin() as conn:
                     pass
@@ -89,4 +89,4 @@ else
 fi
 
 echo "Starting Uvicorn..."
-exec uvicorn app.main:app --host 0.0.0.0 --port 8001
+exec uvicorn app.main:app --host 0.0.0.0 --port "${PORT:-8000}"
