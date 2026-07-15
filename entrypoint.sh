@@ -52,6 +52,7 @@ try:
         
         # Define check functions for migrations in reverse chronological order
         migrations = [
+            ("a966bdf0ab3c", lambda insp: "escrow" in table_names and "payment_method" in [c["name"] for c in insp.get_columns("escrow")]),
             ("9c44495f2803", lambda insp: "users" in table_names and "identity_verified" in [c["name"] for c in insp.get_columns("users")]),
             ("3d766d667485", lambda insp: "driver_vehicles" in table_names),
             ("0c6aa91a55ea", lambda insp: "escrow" in table_names and "platform_fee_percent" in [c["name"] for c in insp.get_columns("escrow")]),
