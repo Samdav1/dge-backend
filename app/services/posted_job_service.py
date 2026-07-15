@@ -27,15 +27,16 @@ class PostedJobService:
         return result.scalar_one_or_none()
 
     async def create_posted_job(self, payload: PostedJobCreate, user_id: uuid.UUID) -> PostedJobRead:
-        # Check wallet balance covers max_price
-        wallet = await self._get_user_wallet(user_id)
-        if not wallet:
-            raise HTTPException(status_code=400, detail="No deposit wallet found. Please fund your wallet first.")
-        if wallet.balance_cents < payload.max_price_cents:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Insufficient wallet balance. You need at least ${payload.max_price_cents / 100:.2f} to post this job."
-            )
+        # Check wallet balance covers max_price ONLY if payment method is platform
+        if payload.payment_method != "cash":
+            wallet = await self._get_user_wallet(user_id)
+            if not wallet:
+                raise HTTPException(status_code=400, detail="No deposit wallet found. Please fund your wallet first.")
+            if wallet.balance_cents < payload.max_price_cents:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Insufficient wallet balance. You need at least ${payload.max_price_cents / 100:.2f} to post this job."
+                )
 
         job = PostedJob(
             user_id=user_id,
@@ -45,6 +46,7 @@ class PostedJobService:
             min_price_cents=payload.min_price_cents,
             max_price_cents=payload.max_price_cents,
             image=payload.image,
+            payment_method=payload.payment_method or "platform",
             status=PostedJobStatus.open,
         )
         created = await self.repo.create(job)

@@ -158,6 +158,7 @@ class PriceNegotiationService:
             proposed_price_cents=proposed_price_cents,
             message=message,
             posted_job_id=job_id,
+            payment_method=job.payment_method or "platform",
         )
         created = await self.repo.create(negotiation_data)
 

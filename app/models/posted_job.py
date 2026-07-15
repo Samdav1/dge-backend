@@ -39,6 +39,11 @@ class PostedJob(SQLModel, table=True):
         sa_column=Column(SAEnum(PostedJobStatus, name="posted_job_status_enum"), nullable=False, default=PostedJobStatus.open)
     )
 
+    payment_method: str = Field(
+        default="platform",
+        sa_column=Column(String(50), nullable=False, server_default="platform")
+    )
+
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),
         sa_column=Column(TIMESTAMP(timezone=True), nullable=False),

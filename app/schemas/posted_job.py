@@ -13,6 +13,7 @@ class PostedJobCreate(BaseModel):
     min_price_cents: int
     max_price_cents: int
     image: Optional[str] = None
+    payment_method: Optional[str] = "platform"
 
     @field_validator("max_price_cents")
     @classmethod
@@ -50,6 +51,7 @@ class PostedJobRead(BaseModel):
     max_price_cents: int
     image: Optional[str] = None
     status: PostedJobStatus
+    payment_method: str
     created_at: datetime
     user: Optional[PostedJobPosterRead] = None
     category: Optional[PostedJobCategoryRead] = None
