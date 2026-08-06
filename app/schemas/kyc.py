@@ -41,6 +41,9 @@ class KYCBase(BaseModel):
     reviewed_at: Optional[datetime] = None
     metamap_verification_id: Optional[str] = None
     metamap_flow_id: Optional[str] = None
+    sumsub_applicant_id: Optional[str] = None
+    sumsub_inspection_id: Optional[str] = None
+    kyc_provider: Optional[str] = "sumsub"
 
 
 class KYCCreate(KYCBase):
@@ -69,6 +72,9 @@ class KYCUpdate(BaseModel):
     reviewed_at: Optional[datetime] = None
     metamap_verification_id: Optional[str] = None
     metamap_flow_id: Optional[str] = None
+    sumsub_applicant_id: Optional[str] = None
+    sumsub_inspection_id: Optional[str] = None
+    kyc_provider: Optional[str] = None
 
 
 class KYCRead(KYCBase):

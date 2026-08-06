@@ -116,6 +116,20 @@ class AdminPaymentSettings(SQLModel, table=True):
     updated_by_admin_id: Optional[UUID] = Field(default=None, foreign_key="superadmin.id")
 
 
+class AdminKYCSettings(SQLModel, table=True):
+    """Single-row configuration table for platform-wide KYC provider setting."""
+    __tablename__ = "admin_kyc_settings"
+
+    id: int = Field(default=1, primary_key=True)  # Always row id=1
+    active_provider: str = Field(default="sumsub", nullable=False)  # "sumsub" or "metamap"
+    updated_at: datetime = Field(
+        sa_column=Column(DateTime(timezone=True), nullable=False),
+        default_factory=lambda: datetime.now(timezone.utc)
+    )
+    updated_by_admin_id: Optional[UUID] = Field(default=None, foreign_key="superadmin.id")
+
+
+
 class FeeType(str, Enum):
     percentage = "percentage"  # e.g. 5 = 5%
     flat = "flat"              # e.g. 500 = 500 cents (₦5.00)

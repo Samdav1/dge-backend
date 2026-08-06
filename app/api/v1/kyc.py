@@ -138,3 +138,125 @@ async def metamap_webhook(request: Request, db: AsyncSession = Depends(get_sessi
         
     await db.commit()
     return {"status": "success", "kyc_status": kyc_status.value}
+
+
+@router.get('/config')
+async def get_kyc_config(db: AsyncSession = Depends(get_session)):
+    """
+    Get active platform KYC configuration (provider: 'sumsub' or 'metamap').
+    """
+    from app.models.admin import AdminKYCSettings
+    from app.config import settings
+
+    try:
+        stmt = select(AdminKYCSettings).where(AdminKYCSettings.id == 1)
+        res = await db.execute(stmt)
+        kyc_settings = res.scalar_one_or_none()
+        active_provider = kyc_settings.active_provider if kyc_settings else settings.default_kyc_provider
+    except Exception:
+        active_provider = settings.default_kyc_provider
+
+    return {
+        "active_provider": active_provider or "sumsub",
+        "metamap_client_id": settings.metamap_client_id,
+        "sumsub_level_name": settings.sumsub_level_name
+    }
+
+
+@router.post('/sumsub-token')
+async def get_sumsub_token(
+    current_user: UserRead = Depends(get_current_user)
+):
+    """
+    Generate a Sumsub WebSDK access token for the logged-in user.
+    """
+    if not current_user or not current_user.id:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
+    from app.services.sumsub_service import generate_sumsub_access_token
+    try:
+        token_data = await generate_sumsub_access_token(user_id=str(current_user.id))
+        return token_data
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Unable to generate Sumsub access token: {e}")
+
+
+@router.post('/webhooks/sumsub')
+async def sumsub_webhook(request: Request, db: AsyncSession = Depends(get_session)):
+    """
+    Sumsub Webhook Endpoint for status and decision updates.
+    """
+    from app.config import settings
+    from app.services.sumsub_service import verify_sumsub_webhook_signature, parse_sumsub_decision
+
+    body = await request.body()
+    digest_header = request.headers.get("x-payload-digest") or request.headers.get("x-payload-digest-hex")
+
+    secret = settings.sumsub_webhook_secret or settings.sumsub_secret_key
+    if secret:
+        if not verify_sumsub_webhook_signature(body, digest_header, secret):
+            raise HTTPException(status_code=401, detail="Invalid Sumsub webhook signature")
+
+    try:
+        payload = json.loads(body)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid JSON payload")
+
+    decision = parse_sumsub_decision(payload)
+    ext_user_id_str = decision.get("externalUserId")
+
+    if not ext_user_id_str:
+        return {"status": "ignored", "reason": "No externalUserId/userId in payload"}
+
+    try:
+        uid = uuid.UUID(str(ext_user_id_str))
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid externalUserId UUID format")
+
+    stmt = select(KYC).where(KYC.user_id == uid)
+    res = await db.execute(stmt)
+    kyc_record = res.scalar_one_or_none()
+
+    new_status = decision.get("status")
+    status_enum = KYCStatus.pending
+    if new_status == "verified":
+        status_enum = KYCStatus.verified
+    elif new_status == "rejected":
+        status_enum = KYCStatus.rejected
+    else:
+        status_enum = KYCStatus.pending
+
+    rejection_reason = decision.get("rejectionReason")
+
+    if not kyc_record:
+        kyc_record = KYC(
+            user_id=uid,
+            status=status_enum,
+            sumsub_applicant_id=decision.get("applicantId"),
+            sumsub_inspection_id=decision.get("inspectionId"),
+            kyc_provider="sumsub",
+            rejection_reason=rejection_reason if status_enum == KYCStatus.rejected else None,
+            submitted_at=datetime.now(timezone.utc)
+        )
+        db.add(kyc_record)
+    else:
+        kyc_record.status = status_enum
+        kyc_record.kyc_provider = "sumsub"
+        if decision.get("applicantId"):
+            kyc_record.sumsub_applicant_id = decision.get("applicantId")
+        if decision.get("inspectionId"):
+            kyc_record.sumsub_inspection_id = decision.get("inspectionId")
+
+        if status_enum == KYCStatus.rejected:
+            kyc_record.rejection_reason = rejection_reason or "Sumsub verification failed"
+        elif status_enum == KYCStatus.verified:
+            kyc_record.rejection_reason = None
+
+        db.add(kyc_record)
+
+    await db.commit()
+    return {
+        "status": "success",
+        "kyc_status": status_enum.value,
+        "user_id": str(uid)
+    }

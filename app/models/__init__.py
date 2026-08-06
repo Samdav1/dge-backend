@@ -19,7 +19,7 @@ from .services import Service, ServiceCategory
 from .price_negotiation import PriceNegotiation
 from .work_submissions import WorkSubmission
 from .notifications import Notification, AdminNotification
-from .admin import SuperAdmin, AdminPaymentSettings, FeeType, PlatformFeeConfig, PlatformRevenueLog
+from .admin import SuperAdmin, AdminPaymentSettings, AdminKYCSettings, FeeType, PlatformFeeConfig, PlatformRevenueLog
 from .posted_job import PostedJob
 from .payment_request import DepositRequest, WithdrawalRequest, UserBankAccount
 
@@ -67,6 +67,7 @@ __all__ = [
     "RideStatus",
     "PostedJob",
     "AdminPaymentSettings",
+    "AdminKYCSettings",
     "DepositRequest",
     "WithdrawalRequest",
     "UserBankAccount",

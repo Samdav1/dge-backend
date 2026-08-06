@@ -32,6 +32,17 @@ class Settings(BaseSettings):
     email_sender_address_cpanel: str = os.getenv("EMAIL_SENDER_ADDRESS_CPANEL", "")
 
     metamap_webhook_secret: str = os.getenv("METAMAP_WEBHOOK_SECRET", "")
+    metamap_client_id: str = os.getenv("METAMAP_CLIENT_ID", "")
+
+    # Sumsub Settings
+    sumsub_app_token: str = os.getenv("SUMSUB_APP_TOKEN", "")
+    sumsub_secret_key: str = os.getenv("SUMSUB_SECRET_KEY", "")
+    sumsub_webhook_secret: str = os.getenv("SUMSUB_WEBHOOK_SECRET", "")
+    sumsub_level_name: str = os.getenv("SUMSUB_LEVEL_NAME", "basic-kyc-level")
+    sumsub_base_url: str = os.getenv("SUMSUB_BASE_URL", "https://api.sumsub.com")
+
+    # Platform default KYC provider ('sumsub' or 'metamap')
+    default_kyc_provider: str = os.getenv("KYC_PROVIDER", "sumsub")
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 

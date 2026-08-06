@@ -298,6 +298,71 @@ async def update_preferences(
     raise HTTPException(status_code=404, detail="Admin not found")
 
 
+class KYCSettingsUpdate(BaseModel):
+    active_provider: str  # "sumsub" or "metamap"
+
+@router.get("/kyc-settings")
+async def get_admin_kyc_settings(
+    db: AsyncSession = Depends(get_session)
+):
+    from sqlmodel import select
+    from app.models.admin import AdminKYCSettings
+    from app.config import settings
+
+    stmt = select(AdminKYCSettings).where(AdminKYCSettings.id == 1)
+    res = await db.execute(stmt)
+    kyc_set = res.scalar_one_or_none()
+    active_provider = kyc_set.active_provider if kyc_set else settings.default_kyc_provider
+
+    return {
+        "active_provider": active_provider or "sumsub",
+        "updated_at": kyc_set.updated_at.isoformat() if kyc_set and kyc_set.updated_at else None,
+        "updated_by_admin_id": str(kyc_set.updated_by_admin_id) if kyc_set and kyc_set.updated_by_admin_id else None
+    }
+
+
+@router.put("/kyc-settings")
+async def update_admin_kyc_settings(
+    req: KYCSettingsUpdate,
+    db: AsyncSession = Depends(get_session),
+    admin: SuperAdminRead = Depends(get_current_admin)
+):
+    from sqlmodel import select
+    from app.models.admin import AdminKYCSettings
+    from datetime import datetime, timezone
+
+    provider = req.active_provider.lower().strip()
+    if provider not in ["sumsub", "metamap"]:
+        raise HTTPException(status_code=400, detail="Invalid provider. Must be 'sumsub' or 'metamap'")
+
+    stmt = select(AdminKYCSettings).where(AdminKYCSettings.id == 1)
+    res = await db.execute(stmt)
+    kyc_set = res.scalar_one_or_none()
+
+    if not kyc_set:
+        kyc_set = AdminKYCSettings(
+            id=1,
+            active_provider=provider,
+            updated_at=datetime.now(timezone.utc),
+            updated_by_admin_id=admin.id
+        )
+        db.add(kyc_set)
+    else:
+        kyc_set.active_provider = provider
+        kyc_set.updated_at = datetime.now(timezone.utc)
+        kyc_set.updated_by_admin_id = admin.id
+        db.add(kyc_set)
+
+    await db.commit()
+    await db.refresh(kyc_set)
+    return {
+        "status": "success",
+        "active_provider": kyc_set.active_provider,
+        "updated_at": kyc_set.updated_at.isoformat()
+    }
+
+
+
 @router.post("/services/status")
 async def change_service_status(
     request: Request,
