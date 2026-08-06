@@ -37,13 +37,17 @@ import sys, os
 try:
     from sqlalchemy import create_engine, text, inspect
 
-    db_uri = os.getenv('DB_URI', '')
+    db_uri = os.getenv('DB_URI', '') or os.getenv('DATABASE_URL', '') or os.getenv('POSTGRES_URL', '')
     if not db_uri:
-        print("WARNING: No DB_URI found, skipping migration check.")
+        print("WARNING: No DB_URI or DATABASE_URL found, skipping migration check.")
         sys.exit(3)
 
     if 'asyncpg' in db_uri:
         db_uri = db_uri.replace('postgresql+asyncpg', 'postgresql+psycopg2')
+    elif db_uri.startswith('postgres://'):
+        db_uri = db_uri.replace('postgres://', 'postgresql+psycopg2://', 1)
+    elif db_uri.startswith('postgresql://') and not db_uri.startswith('postgresql+'):
+        db_uri = db_uri.replace('postgresql://', 'postgresql+psycopg2://', 1)
 
     engine = create_engine(db_uri)
     with engine.connect() as conn:

@@ -5,8 +5,19 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 load_dotenv()
 
 
+def get_database_uri() -> str:
+    uri = os.getenv("DB_URI", "") or os.getenv("DATABASE_URL", "") or os.getenv("POSTGRES_URL", "")
+    if not uri:
+        return ""
+    if uri.startswith("postgres://"):
+        uri = uri.replace("postgres://", "postgresql+asyncpg://", 1)
+    elif uri.startswith("postgresql://") and not uri.startswith("postgresql+"):
+        uri = uri.replace("postgresql://", "postgresql+asyncpg://", 1)
+    return uri
+
+
 class Settings(BaseSettings):
-    database_uri: str = os.getenv("DB_URI")
+    database_uri: str = get_database_uri()
     agora_app_id: str = os.getenv("AGORA_APP_ID", "")
     agora_app_certificate: str = os.getenv("AGORA_APP_CERTIFICATE", "")
     frontend_url: str = os.getenv("FRONTEND_URL", "http://localhost:3000")
