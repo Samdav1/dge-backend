@@ -65,11 +65,32 @@ async def lifespan(app: FastAPI):
     print("🛑 Managers stopped and Redis closed")
 
 
+from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.responses import Response
+
+class CrossOriginResourcePolicyMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request, call_next):
+        response: Response = await call_next(request)
+        if request.url.path.startswith("/static"):
+            response.headers["Access-Control-Allow-Origin"] = "*"
+            response.headers["Cross-Origin-Resource-Policy"] = "cross-origin"
+        return response
+
+
 app = FastAPI(
     title="DGE Techs",
     lifespan=lifespan,
 )
 
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+app.add_middleware(CrossOriginResourcePolicyMiddleware)
 app.add_middleware(AuthMiddleware)
 
 app.mount("/static", StaticFiles(directory="uploaded_files"), name="static")
