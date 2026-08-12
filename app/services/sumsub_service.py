@@ -142,6 +142,8 @@ async def check_and_sync_sumsub_applicant_status(db: Any, kyc_record: Any) -> No
                 elif new_status_str == "rejected":
                     kyc_record.status = KYCStatus.rejected
                     kyc_record.rejection_reason = decision.get("rejectionReason") or "Verification rejected"
+                elif new_status_str == "unverified":
+                    kyc_record.status = KYCStatus.unverified
                 elif new_status_str == "pending":
                     kyc_record.status = KYCStatus.pending
                 
@@ -160,20 +162,25 @@ async def check_and_sync_sumsub_applicant_status(db: Any, kyc_record: Any) -> No
 
 def parse_sumsub_decision(payload: Dict[str, Any]) -> Dict[str, Any]:
     """
-    Parse decision details from a Sumsub webhook payload safely.
-    Handles applicantReviewed and applicantPending events.
+    Parse decision details from a Sumsub webhook payload OR GET applicant API response safely.
+    Handles both top-level webhook fields and nested `review` object fields returned by Sumsub API.
     """
+    review_obj = payload.get("review") if isinstance(payload.get("review"), dict) else {}
+
     event_type = payload.get("type") or payload.get("eventName")
-    review_status = payload.get("reviewStatus")
-    review_result = payload.get("reviewResult") or {}
+    review_status = payload.get("reviewStatus") or review_obj.get("reviewStatus")
+    
+    review_result = payload.get("reviewResult") or review_obj.get("reviewResult") or {}
+    if not isinstance(review_result, dict):
+        review_result = {}
     
     review_answer = review_result.get("reviewAnswer")  # "GREEN" or "RED"
     reject_labels = review_result.get("rejectLabels") or []
     reject_type = review_result.get("reviewRejectType")
 
-    applicant_id = payload.get("applicantId")
-    inspection_id = payload.get("inspectionId")
-    external_user_id = payload.get("externalUserId") or payload.get("userId")
+    applicant_id = payload.get("applicantId") or payload.get("id")
+    inspection_id = payload.get("inspectionId") or review_obj.get("inspectionId")
+    external_user_id = payload.get("externalUserId") or payload.get("userId") or payload.get("applicantMemberId")
 
     status = "pending"
     rejection_reason = None
@@ -192,7 +199,7 @@ def parse_sumsub_decision(payload: Dict[str, Any]) -> Dict[str, Any]:
         status = "verified"
     elif review_status == "init":
         status = "unverified"
-    elif review_status in ["pending", "queued", "onHold"]:
+    elif review_status in ["pending", "queued", "onHold", "prechecked"]:
         status = "pending"
 
     return {
@@ -202,5 +209,6 @@ def parse_sumsub_decision(payload: Dict[str, Any]) -> Dict[str, Any]:
         "inspectionId": inspection_id,
         "rejectionReason": rejection_reason,
         "eventType": event_type,
-        "reviewAnswer": review_answer
+        "reviewAnswer": review_answer,
+        "reviewStatus": review_status
     }
