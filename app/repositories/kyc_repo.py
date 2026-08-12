@@ -55,6 +55,23 @@ async def get_user_kyc_repo(db: AsyncSession, user_id) -> KYCRead | None:
     statement = select(KYC).where(KYC.user_id == user_id)
     result = await db.exec(statement)
     kyc_record = result.first()
+
+    if not kyc_record:
+        kyc_record = KYC(user_id=user_id, status=KYCStatus.unverified)
+        try:
+            db.add(kyc_record)
+            await db.commit()
+            await db.refresh(kyc_record)
+        except Exception:
+            pass
+
+    if kyc_record and kyc_record.status != KYCStatus.verified:
+        try:
+            from app.services.sumsub_service import check_and_sync_sumsub_applicant_status
+            await check_and_sync_sumsub_applicant_status(db, kyc_record)
+        except Exception as e:
+            print(f"Error in check_and_sync_sumsub_applicant_status: {e}")
+
     if kyc_record:
         return KYCRead.model_validate(kyc_record)
     return None

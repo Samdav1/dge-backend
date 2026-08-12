@@ -63,6 +63,14 @@ async def generate_sumsub_access_token(
     base_url = settings.sumsub_base_url.rstrip("/")
     level = level_name or settings.sumsub_level_name or "basic-kyc-level"
 
+    if not app_token or not secret_key:
+        logger.warning("SUMSUB_APP_TOKEN or SUMSUB_SECRET_KEY not configured, returning dev token.")
+        return {
+            "token": f"dev_token_{user_id}",
+            "userId": user_id,
+            "levelName": level
+        }
+
     path_with_query = f"/resources/accessTokens?userId={user_id}&ttlInSec={ttl_in_sec}&levelName={level}"
     url = f"{base_url}{path_with_query}"
 
@@ -92,6 +100,62 @@ async def generate_sumsub_access_token(
     except Exception as e:
         logger.error(f"Error generating Sumsub access token for user {user_id}: {e}")
         raise e
+
+
+async def check_and_sync_sumsub_applicant_status(db: Any, kyc_record: Any) -> None:
+    """
+    Directly query Sumsub API for applicant verification status using externalUserId.
+    Updates the database KYC record if a decision (GREEN/RED/completed) is returned.
+    """
+    app_token = settings.sumsub_app_token
+    secret_key = settings.sumsub_secret_key
+    if not app_token or not secret_key or not kyc_record or not kyc_record.user_id:
+        return
+
+    from app.models.kyc import KYCStatus
+    user_id_str = str(kyc_record.user_id)
+    base_url = settings.sumsub_base_url.rstrip("/")
+    path_with_query = f"/resources/applicants/-;externalUserId={user_id_str}/one"
+    url = f"{base_url}{path_with_query}"
+
+    ts = str(int(time.time()))
+    sig = create_sumsub_signature(secret_key, ts, "GET", path_with_query, b"")
+
+    headers = {
+        "Accept": "application/json",
+        "X-App-Token": app_token,
+        "X-App-Access-Sig": sig,
+        "X-App-Access-Ts": ts
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.get(url, headers=headers)
+            if resp.status_code == 200:
+                data = resp.json()
+                decision = parse_sumsub_decision(data)
+                
+                new_status_str = decision.get("status")
+                if new_status_str == "verified":
+                    kyc_record.status = KYCStatus.verified
+                    kyc_record.rejection_reason = None
+                elif new_status_str == "rejected":
+                    kyc_record.status = KYCStatus.rejected
+                    kyc_record.rejection_reason = decision.get("rejectionReason") or "Verification rejected"
+                elif new_status_str == "pending":
+                    kyc_record.status = KYCStatus.pending
+                
+                if decision.get("applicantId"):
+                    kyc_record.sumsub_applicant_id = decision.get("applicantId")
+                if decision.get("inspectionId"):
+                    kyc_record.sumsub_inspection_id = decision.get("inspectionId")
+                
+                kyc_record.kyc_provider = "sumsub"
+                db.add(kyc_record)
+                await db.commit()
+                await db.refresh(kyc_record)
+    except Exception as e:
+        logger.error(f"Error syncing Sumsub applicant status for user {user_id_str}: {e}")
 
 
 def parse_sumsub_decision(payload: Dict[str, Any]) -> Dict[str, Any]:

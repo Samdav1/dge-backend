@@ -182,6 +182,8 @@ async def get_sumsub_token(
 
 
 @router.post('/webhooks/sumsub')
+@router.post('/sumsub-webhook')
+@router.post('/webhook')
 async def sumsub_webhook(request: Request, db: AsyncSession = Depends(get_session)):
     """
     Sumsub Webhook Endpoint for status and decision updates.
