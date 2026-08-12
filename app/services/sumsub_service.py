@@ -190,7 +190,9 @@ def parse_sumsub_decision(payload: Dict[str, Any]) -> Dict[str, Any]:
             rejection_reason += f" ({reject_type.capitalize()})"
     elif review_status == "completed":
         status = "verified"
-    elif review_status in ["init", "pending", "queued", "onHold"]:
+    elif review_status == "init":
+        status = "unverified"
+    elif review_status in ["pending", "queued", "onHold"]:
         status = "pending"
 
     return {
