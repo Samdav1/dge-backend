@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h2>Job Posted Successfully 🚀</h2>
+
+<p>Hi {{ name }},</p>
+
+<p>Your job request <strong>"{{ job_title }}"</strong> has been successfully uploaded and listed on the DGE Marketplace job board.</p>
+
+<table class="details-table">
+    <tr>
+        <th>Job Title</th>
+        <td>{{ job_title }}</td>
+    </tr>
+    <tr>
+        <th>Price Range</th>
+        <td>{{ price_range }}</td>
+    </tr>
+    <tr>
+        <th>Payment Method</th>
+        <td>{{ payment_method }}</td>
+    </tr>
+</table>
+
+<p>Freelancers and service providers can now view your post and submit bids. You will be notified whenever someone bids on your job.</p>
+
+<div class="cta-container">
+    <a href="{{ cta_link }}" class="cta-button">View My Job</a>
+</div>
+{% endblock %}

@@ -43,11 +43,21 @@ class ServiceService:
             user_id=user.id,
             username=user.username,
             meta_tags=payload.meta_tags,
-            keywords=payload.keywords,
             image=image_path,
             status=ServiceStatus.pending_review,
         )
-        return await self.repo.create(service, payload.category_ids)
+        created_service = await self.repo.create(service, payload.category_ids)
+
+        try:
+            from app.repositories.user_repo import get_user_by_id
+            user_obj = await get_user_by_id(user.id, db)
+            if user_obj:
+                from app.services.email_notification_service import NotificationService
+                NotificationService().send_service_status_mail(user_obj, created_service, "submitted")
+        except Exception as e:
+            print(f"Failed to send service submitted email: {e}")
+
+        return created_service
 
     async def list_services(self, *, user_id=None, status=None, type=None, search=None, category_id=None, offset: int = 0, limit: int = 100, sort_by: str = "newest") -> List[Service]:
         return await self.repo.list(user_id=user_id, status=status, type=type, search=search, category_id=category_id, offset=offset, limit=limit, sort_by=sort_by)

@@ -257,6 +257,16 @@ async def sumsub_webhook(request: Request, db: AsyncSession = Depends(get_sessio
         db.add(kyc_record)
 
     await db.commit()
+
+    try:
+        from app.repositories.user_repo import get_user_by_id
+        user_obj = await get_user_by_id(uid, db)
+        if user_obj:
+            from app.services.email_notification_service import NotificationService
+            NotificationService().send_kyc_status_mail(user_obj, status_enum.value, rejection_reason if status_enum == KYCStatus.rejected else None)
+    except Exception as ex:
+        print(f"Failed to send webhook KYC status email: {ex}")
+
     return {
         "status": "success",
         "kyc_status": status_enum.value,

@@ -162,7 +162,7 @@ class PriceNegotiationService:
         )
         created = await self.repo.create(negotiation_data)
 
-        # Notify job poster
+        # Notify job poster via in-app & socket
         in_app_service = InAppNotificationService(NotificationRepository(self.repo.db))
         notification_data = NotificationCreate(
             user_id=job.user_id,
@@ -181,6 +181,17 @@ class PriceNegotiationService:
                 "created_at": notif.created_at.isoformat()
             }
         })
+
+        # Email notification to job poster
+        try:
+            poster, applicant = await gather(
+                self.repo.get_user_by_id(job.user_id),
+                self.repo.get_user_by_id(bidder_id)
+            )
+            if poster and applicant:
+                self.notification_service.send_job_application_mail(poster, applicant, job, proposed_price_cents)
+        except Exception as e:
+            print(f"Failed to send job application email: {e}")
 
         return await self.repo.get_by_id(created.id)
 

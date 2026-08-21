@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+
+{% block content %}
+{% if status == 'approved' or status == 'ACTIVE' %}
+<h2>Service Approved & Published 🎉</h2>
+
+<p>Hi {{ name }},</p>
+
+<p>Your service listing <strong>"{{ service_name }}"</strong> has been reviewed and approved by the DGE admin team.</p>
+
+<p>It is now active and publicly visible to clients on the DGE Marketplace ecosystem.</p>
+
+<div class="cta-container">
+    <a href="{{ cta_link }}" class="cta-button">View Service Listing</a>
+</div>
+{% else %}
+<h2>Service Submitted for Review 📋</h2>
+
+<p>Hi {{ name }},</p>
+
+<p>Your new service listing <strong>"{{ service_name }}"</strong> has been received and is currently under review by our team.</p>
+
+<p>We will notify you via email as soon as your service is reviewed and published.</p>
+
+<div class="cta-container">
+    <a href="{{ cta_link }}" class="cta-button">View Dashboard</a>
+</div>
+{% endif %}
+{% endblock %}

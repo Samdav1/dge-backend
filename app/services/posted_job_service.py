@@ -52,6 +52,16 @@ class PostedJobService:
         created = await self.repo.create(job)
         # Reload with relationships
         full = await self.repo.get_by_id(created.id)
+
+        try:
+            from app.repositories.user_repo import get_user_by_id
+            user = await get_user_by_id(user_id, self.db)
+            if user:
+                from app.services.email_notification_service import NotificationService
+                NotificationService().send_job_posted_mail(user, full)
+        except Exception as e:
+            print(f"Failed to send job_posted email: {e}")
+
         return PostedJobRead.model_validate(full)
 
     async def list_open_jobs(self, category_id: Optional[uuid.UUID] = None, search: Optional[str] = None) -> List[PostedJobRead]:

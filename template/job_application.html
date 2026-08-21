@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h2>New Job Application Received 📩</h2>
+
+<p>Hi {{ poster_name }},</p>
+
+<p>You have received a new bid / application on your posted job <strong>"{{ job_title }}"</strong> from <strong>{{ applicant_name }}</strong>.</p>
+
+<table class="details-table">
+    <tr>
+        <th>Applicant</th>
+        <td>{{ applicant_name }}</td>
+    </tr>
+    <tr>
+        <th>Job Title</th>
+        <td>{{ job_title }}</td>
+    </tr>
+    <tr>
+        <th>Proposed Bid</th>
+        <td style="color: #C69C2E;">{{ proposed_price }}</td>
+    </tr>
+</table>
+
+<p>Log in to your DGE dashboard to review the bid details, message the provider, or accept the offer.</p>
+
+<div class="cta-container">
+    <a href="{{ cta_link }}" class="cta-button">Review Bid</a>
+</div>
+{% endblock %}

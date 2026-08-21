@@ -407,6 +407,16 @@ async def change_service_status(
             s.status = ServiceStatus.draft
         await db.commit()
         await db.refresh(s)
+
+        try:
+            from app.repositories.user_repo import get_user_by_id
+            user_obj = await get_user_by_id(s.user_id, db)
+            if user_obj:
+                from app.services.email_notification_service import NotificationService
+                NotificationService().send_service_status_mail(user_obj, s, status.lower())
+        except Exception as ex:
+            print(f"Failed to send service status email: {ex}")
+
         return {"message": "Status updated successfully", "status": s.status.value if hasattr(s.status, "value") else str(s.status)}
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -1441,6 +1451,16 @@ async def review_admin_kyc(user_id: str, req: Request, db: AsyncSession = Depend
         
     kyc.reviewed_at = datetime.now(timezone.utc)
     await db.commit()
+
+    try:
+        from app.repositories.user_repo import get_user_by_id
+        user_obj = await get_user_by_id(uid, db)
+        if user_obj:
+            from app.services.email_notification_service import NotificationService
+            NotificationService().send_kyc_status_mail(user_obj, kyc.status.value, reason if action == "reject" else None)
+    except Exception as ex:
+        print(f"Failed to send KYC status email: {ex}")
+
     return {"message": f"KYC {action}d successfully", "status": kyc.status.value.upper()}
 
 

@@ -304,3 +304,56 @@ class NotificationService:
                 'message': f"The ride was cancelled by {cancelled_by.username}."
             }
             self._render_and_dispatch('ride_cancelled.html', [driver.email], subject, driver_context)
+
+    # ─── Job Board & Service Marketplace ───────────────────────────────────
+
+    def send_job_posted_mail(self, user: Users, job):
+        subject = f"Job Posted Successfully: {job.title} 🚀"
+        context = {
+            'name': user.username,
+            'job_title': job.title,
+            'price_range': f"${job.min_price_cents / 100:.2f} - ${job.max_price_cents / 100:.2f}",
+            'payment_method': (job.payment_method or "platform").capitalize(),
+            'cta_link': f"{settings.frontend_url}/dashboard/my-jobs"
+        }
+        self._render_and_dispatch('job_posted.html', [user.email], subject, context)
+
+    def send_job_application_mail(self, poster: Users, applicant: Users, job, proposed_price_cents: int):
+        subject = f"New Bid on Your Job: '{job.title}' 📩"
+        context = {
+            'poster_name': poster.username,
+            'applicant_name': applicant.username,
+            'job_title': job.title,
+            'proposed_price': f"${proposed_price_cents / 100:.2f}",
+            'cta_link': f"{settings.frontend_url}/dashboard/my-jobs"
+        }
+        self._render_and_dispatch('job_application.html', [poster.email], subject, context)
+
+    def send_kyc_status_mail(self, user: Users, status: str, rejection_reason: str = None):
+        if status in ["verified", "approved"]:
+            subject = "KYC Verification Approved 🎉 - DGE World"
+        else:
+            subject = "KYC Verification Status Update - DGE World"
+
+        context = {
+            'name': user.username,
+            'status': status,
+            'rejection_reason': rejection_reason,
+            'cta_link': f"{settings.frontend_url}/dashboard/profile"
+        }
+        self._render_and_dispatch('kyc_status.html', [user.email], subject, context)
+
+    def send_service_status_mail(self, user: Users, service, status: str):
+        if status in ["approved", "ACTIVE"]:
+            subject = f"Service Approved: '{service.name}' 🎉"
+        else:
+            subject = f"Service Submitted for Review: '{service.name}' 📋"
+
+        context = {
+            'name': user.username,
+            'service_name': service.name,
+            'status': status,
+            'cta_link': f"{settings.frontend_url}/dashboard/marketplace"
+        }
+        self._render_and_dispatch('service_status.html', [user.email], subject, context)
+

@@ -45,6 +45,12 @@ async def create_user_service(db: AsyncSession, user: UserCreate):
     notification_service = NotificationService()
     notification_service.send_signup_welcome_mail(user_read)
 
+    try:
+        from app.services.auth_service import create_user_email_verification_token
+        await create_user_email_verification_token(user_read.email, db)
+    except Exception as e:
+        print(f"Failed to dispatch verification email: {e}")
+
     return {"user": user_read, "access_token": token}
 
 async def google_auth_login(token: GoogleCallBack, db: AsyncSession):
