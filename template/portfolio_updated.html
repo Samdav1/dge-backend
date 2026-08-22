@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h2>Portfolio Item Updated 🎨</h2>
+
+<p>Hi {{ name }},</p>
+
+<p>Your portfolio item <strong>"{{ portfolio_title }}"</strong> has been successfully saved to your DGE World profile.</p>
+
+<p>Showcasing your best work helps clients and partners discover your skills and hire you for new projects.</p>
+
+<div class="cta-container">
+    <a href="{{ cta_link }}" class="cta-button">View Portfolio</a>
+</div>
+{% endblock %}

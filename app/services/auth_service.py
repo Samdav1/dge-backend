@@ -127,7 +127,7 @@ async def send_password_reset_link_service(email: EmailStr, db: AsyncSession):
         if user:
             token = await create_email_token(str(user.id))
             notifier = NotificationService()
-            notifier.send_verification_email(user, token)
+            notifier.send_password_reset_mail(user, token)
             return {"message": "Password Reset Link Successfully Sent!"}
         else:
             raise HTTPException(status_code=404, detail="Email not found")
@@ -160,7 +160,7 @@ async def change_user_pass_service(user_pass: ChangeUserPass, db: AsyncSession):
             await db.commit()
             await db.refresh(user)
             notifier = NotificationService()
-            notifier.send_verification_success_email(user)
+            notifier.send_password_changed_mail(user)
         else:
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
 
@@ -173,7 +173,7 @@ async def send_team_password_reset_link_service(email: EmailStr, db: AsyncSessio
         if user:
             token = await create_email_token(str(user.id))
             notifier = NotificationService()
-            notifier.send_verification_email(user, token)
+            notifier.send_password_reset_mail(user, token)
             return {"message": "Password Reset Link Successfully Sent!"}
         else:
             raise HTTPException(status_code=404, detail="Email not found")
@@ -200,7 +200,7 @@ async def change_team_user_pass_service(user_pass: ChangeUserPass, db: AsyncSess
             await db.commit()
             await db.refresh(user)
             notifier = NotificationService()
-            notifier.send_verification_success_email(user)
+            notifier.send_password_changed_mail(user)
         else:
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
 

@@ -60,46 +60,171 @@ class NotificationService:
         }
         self._render_and_dispatch('verify_email.html', [str(new_user.email)], subject, context)
 
-    def send_verification_success_email(self, user: UserRead):
+    def send_verification_success_email(self, user):
         subject = "You're Verified! Welcome to DGE World 🎉"
+        username = getattr(user, 'username', 'Valued User')
+        email = getattr(user, 'email', '')
         context = {
-            'name': user.username,
+            'name': username,
             'cta_text': "Go to Your Dashboard",
             'cta_link': f"{settings.frontend_url}/dashboard"
         }
-        self._render_and_dispatch('welcome.html', [str(user.email)], subject, context)
+        self._render_and_dispatch('welcome.html', [str(email)], subject, context)
+
+    def send_password_reset_mail(self, user, token: str):
+        subject = "Reset Your DGE World Password 🔐"
+        username = getattr(user, 'username', 'Valued User')
+        email = getattr(user, 'email', '')
+        reset_link = f"{settings.frontend_url}/auth/reset-password?token={token}"
+        context = {
+            'name': username,
+            'cta_link': reset_link
+        }
+        self._render_and_dispatch('password_reset.html', [str(email)], subject, context)
+
+    def send_password_changed_mail(self, user):
+        from datetime import datetime, timezone
+        subject = "Security Alert: Password Changed Successfully 🛡️"
+        username = getattr(user, 'username', 'Valued User')
+        email = getattr(user, 'email', '')
+        context = {
+            'name': username,
+            'email': email,
+            'date_time': datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC"),
+            'cta_link': f"{settings.frontend_url}/dashboard"
+        }
+        self._render_and_dispatch('password_changed.html', [str(email)], subject, context)
+
+    def send_profile_updated_mail(self, user, first_name: str = None, last_name: str = None, phone: str = None, country: str = None):
+        from datetime import datetime, timezone
+        subject = "Your DGE World Profile Was Updated 👤"
+        username = getattr(user, 'username', 'Valued User')
+        email = getattr(user, 'email', '')
+        context = {
+            'name': username,
+            'first_name': first_name,
+            'last_name': last_name,
+            'phone': phone,
+            'country': country,
+            'updated_at': datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC"),
+            'cta_link': f"{settings.frontend_url}/dashboard/profile"
+        }
+        self._render_and_dispatch('profile_updated.html', [str(email)], subject, context)
+
+    def send_portfolio_updated_mail(self, user, portfolio_title: str):
+        subject = f"Portfolio Updated: '{portfolio_title}' 🎨"
+        username = getattr(user, 'username', 'Valued User')
+        email = getattr(user, 'email', '')
+        context = {
+            'name': username,
+            'portfolio_title': portfolio_title,
+            'cta_link': f"{settings.frontend_url}/dashboard/portfolio"
+        }
+        self._render_and_dispatch('portfolio_updated.html', [str(email)], subject, context)
 
     # ─── Payments & Wallets ───────────────────────────────────────────────────
 
-    def send_deposit_success_mail(self, user: Users, amount_cents: int, reference: str, date_str: str):
+    def send_deposit_success_mail(self, user, amount_cents: int, reference: str, date_str: str = None):
+        from datetime import datetime, timezone
         subject = "Deposit Successful - DGE World"
+        username = getattr(user, 'username', 'Valued User')
+        email = getattr(user, 'email', '')
+        formatted_date = date_str or datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
         context = {
-            'name': user.username,
+            'name': username,
             'amount': f"₦{amount_cents / 100:,.2f}",
             'reference': reference,
-            'date': date_str,
+            'date': formatted_date,
             'cta_link': f"{settings.frontend_url}/dashboard/wallet"
         }
-        self._render_and_dispatch('deposit_success.html', [user.email], subject, context)
+        self._render_and_dispatch('deposit_success.html', [str(email)], subject, context)
 
-    def send_withdrawal_status_mail(self, user: Users, status: str, amount_cents: int, bank_name: str, account_number: str, reference: str = None, rejection_reason: str = None):
+    def send_wallet_credit_mail(self, user, amount_cents: int, reference: str, description: str = None, date_str: str = None):
+        from datetime import datetime, timezone
+        subject = f"Wallet Credited (+₦{amount_cents / 100:,.2f}) - DGE World 💰"
+        username = getattr(user, 'username', 'Valued User')
+        email = getattr(user, 'email', '')
+        formatted_date = date_str or datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+        context = {
+            'name': username,
+            'amount': f"₦{amount_cents / 100:,.2f}",
+            'reference': reference,
+            'description': description or "Wallet Credit Transaction",
+            'date': formatted_date,
+            'cta_link': f"{settings.frontend_url}/dashboard/wallet"
+        }
+        self._render_and_dispatch('wallet_credit.html', [str(email)], subject, context)
+
+    def send_wallet_debit_mail(self, user, amount_cents: int, reference: str, description: str = None, date_str: str = None):
+        from datetime import datetime, timezone
+        subject = f"Wallet Debited (-₦{amount_cents / 100:,.2f}) - DGE World 💳"
+        username = getattr(user, 'username', 'Valued User')
+        email = getattr(user, 'email', '')
+        formatted_date = date_str or datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+        context = {
+            'name': username,
+            'amount': f"₦{amount_cents / 100:,.2f}",
+            'reference': reference,
+            'description': description or "Wallet Debit Transaction",
+            'date': formatted_date,
+            'cta_link': f"{settings.frontend_url}/dashboard/wallet"
+        }
+        self._render_and_dispatch('wallet_debit.html', [str(email)], subject, context)
+
+    def send_transaction_status_mail(
+        self, user, status: str, amount_cents: int, reference: str, 
+        transaction_type: str = "Wallet Transaction", description: str = None, 
+        failure_reason: str = None, date_str: str = None
+    ):
+        from datetime import datetime, timezone
+        status_clean = status.lower().strip()
+        status_title = status_clean.capitalize()
+        subject = f"Transaction Update ({status_title}): {reference}"
+        username = getattr(user, 'username', 'Valued User')
+        email = getattr(user, 'email', '')
+        formatted_date = date_str or datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+
+        if status_clean in ["successful", "completed", "approved"]:
+            msg = f"Your {transaction_type.lower()} of ₦{amount_cents / 100:,.2f} was successfully completed."
+        elif status_clean in ["failed", "rejected", "declined"]:
+            msg = f"Your {transaction_type.lower()} of ₦{amount_cents / 100:,.2f} failed or was declined."
+        else:
+            msg = f"Your {transaction_type.lower()} of ₦{amount_cents / 100:,.2f} is currently pending processing."
+
+        context = {
+            'name': username,
+            'status_key': status_clean,
+            'status_display': status_title,
+            'transaction_type': transaction_type,
+            'amount': f"₦{amount_cents / 100:,.2f}",
+            'reference': reference,
+            'message': description or msg,
+            'failure_reason': failure_reason,
+            'date': formatted_date,
+            'cta_link': f"{settings.frontend_url}/dashboard/wallet"
+        }
+        self._render_and_dispatch('transaction_status.html', [str(email)], subject, context)
+
+    def send_withdrawal_status_mail(self, user, status: str, amount_cents: int, bank_name: str, account_number: str, reference: str = None, rejection_reason: str = None):
+        username = getattr(user, 'username', 'Valued User')
+        email = getattr(user, 'email', '')
         amount_str = f"₦{amount_cents / 100:,.2f}"
 
-        if status == "pending":
+        if status.lower() == "pending":
             subject = "Withdrawal Request Received ⏳"
             context = {
-                'name': user.username,
+                'name': username,
                 'amount': amount_str,
                 'bank_name': bank_name,
                 'account_number': account_number,
                 'cta_link': f"{settings.frontend_url}/dashboard/wallet"
             }
-            self._render_and_dispatch('withdrawal_requested.html', [user.email], subject, context)
+            self._render_and_dispatch('withdrawal_requested.html', [str(email)], subject, context)
         else:
             subject = f"Withdrawal {status.capitalize()} - DGE World"
             context = {
-                'name': user.username,
-                'status': status,
+                'name': username,
+                'status': status.lower(),
                 'amount': amount_str,
                 'bank_name': bank_name,
                 'account_number': account_number,
@@ -107,7 +232,8 @@ class NotificationService:
                 'rejection_reason': rejection_reason,
                 'cta_link': f"{settings.frontend_url}/dashboard/wallet"
             }
-            self._render_and_dispatch('withdrawal_processed.html', [user.email], subject, context)
+            self._render_and_dispatch('withdrawal_processed.html', [str(email)], subject, context)
+
 
     # ─── Services & Submissions ─────────────────────────────────────────────
 
@@ -393,5 +519,22 @@ class NotificationService:
             'cta_link': f"{settings.frontend_url}/dashboard/negotiations"
         }
         self._render_and_dispatch('negotiation_status.html', [target_user.email], subject, context)
+
+    def send_job_status_mail(self, user, job_title: str, status: str, message: str = None, reason: str = None):
+        subject = f"Job Update ({status.capitalize()}): '{job_title}'"
+        username = getattr(user, 'username', 'Valued User')
+        email = getattr(user, 'email', '')
+        default_msg = f"The status of your job '{job_title}' has been updated to {status.lower()}."
+        context = {
+            'name': username,
+            'job_title': job_title,
+            'status': status,
+            'status_display': status.capitalize(),
+            'message': message or default_msg,
+            'reason': reason,
+            'cta_link': f"{settings.frontend_url}/dashboard/my-jobs"
+        }
+        self._render_and_dispatch('job_status.html', [str(email)], subject, context)
+
 
 

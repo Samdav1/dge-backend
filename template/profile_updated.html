@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h2>Profile Details Updated 👤</h2>
+
+<p>Hi {{ name }},</p>
+
+<p>Your DGE World profile information was recently updated.</p>
+
+<table class="details-table">
+    {% if first_name or last_name %}
+    <tr>
+        <th>Name</th>
+        <td>{{ first_name }} {{ last_name }}</td>
+    </tr>
+    {% endif %}
+    {% if phone %}
+    <tr>
+        <th>Phone</th>
+        <td>{{ phone }}</td>
+    </tr>
+    {% endif %}
+    {% if country %}
+    <tr>
+        <th>Country</th>
+        <td>{{ country }}</td>
+    </tr>
+    {% endif %}
+    <tr>
+        <th>Updated At</th>
+        <td>{{ updated_at }}</td>
+    </tr>
+</table>
+
+<div class="cta-container">
+    <a href="{{ cta_link }}" class="cta-button">View Your Profile</a>
+</div>
+{% endblock %}

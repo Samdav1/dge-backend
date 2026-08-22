@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h2>Transaction Update: {{ status_display }} 📊</h2>
+
+<p>Hi {{ name }},</p>
+
+<p>{{ message }}</p>
+
+<table class="details-table">
+    <tr>
+        <th>Transaction Type</th>
+        <td>{{ transaction_type }}</td>
+    </tr>
+    <tr>
+        <th>Amount</th>
+        <td>{{ amount }}</td>
+    </tr>
+    <tr>
+        <th>Status</th>
+        {% if status_key == 'successful' or status_key == 'completed' or status_key == 'approved' %}
+        <td style="color: #10b981; font-weight: 700;">Successful ✅</td>
+        {% elif status_key == 'failed' or status_key == 'rejected' or status_key == 'declined' %}
+        <td style="color: #ef4444; font-weight: 700;">Failed ❌</td>
+        {% else %}
+        <td style="color: #f59e0b; font-weight: 700;">Pending ⏳</td>
+        {% endif %}
+    </tr>
+    <tr>
+        <th>Reference ID</th>
+        <td>{{ reference }}</td>
+    </tr>
+    {% if failure_reason %}
+    <tr>
+        <th>Reason</th>
+        <td style="color: #ef4444;">{{ failure_reason }}</td>
+    </tr>
+    {% endif %}
+    <tr>
+        <th>Date & Time</th>
+        <td>{{ date }}</td>
+    </tr>
+</table>
+
+<div class="cta-container">
+    <a href="{{ cta_link }}" class="cta-button">View Transaction History</a>
+</div>
+{% endblock %}

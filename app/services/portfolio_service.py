@@ -7,11 +7,23 @@ from app.dependencies.file_handler import save_portfolio_media
 from app.repositories import portfolio_repo
 from app.schemas.portfolio import PortfolioMediaCreate, PortfolioMediaRead
 
+from app.repositories.user_repo import get_user_by_id
+from app.services.email_notification_service import NotificationService
+
 async def create_portfolio_service(portfolio_info: UserPortfolioCreate, db: AsyncSession, user_id) -> UserPortfolioRead:
     if not user_id:
         raise HTTPException(status_code=404, detail="User not found")
     try:
         user_portfolio = await create_portfolio_repo(portfolio_info, db=db, user_id=user_id)
+        if user_portfolio:
+            try:
+                user = await get_user_by_id(user_id, db)
+                if user:
+                    notifier = NotificationService()
+                    title = getattr(user_portfolio, 'title', portfolio_info.title if hasattr(portfolio_info, 'title') else 'Portfolio Item')
+                    notifier.send_portfolio_updated_mail(user=user, portfolio_title=str(title))
+            except Exception as e:
+                print(f"Failed to dispatch portfolio created email: {e}")
         return user_portfolio
     except Exception as error:
         raise HTTPException(status_code=500, detail=str(error))
@@ -21,9 +33,19 @@ async def update_portfolio_service(portfolio_info: UserPortfolioUpdate, db: Asyn
         raise HTTPException(status_code=404, detail="User not found")
     try:
         user_portfolio_update = await update_portfolio_repo(portfolio_info, db=db, user_id=user_id)
+        if user_portfolio_update:
+            try:
+                user = await get_user_by_id(user_id, db)
+                if user:
+                    notifier = NotificationService()
+                    title = getattr(user_portfolio_update, 'title', 'Portfolio Showcase')
+                    notifier.send_portfolio_updated_mail(user=user, portfolio_title=str(title))
+            except Exception as e:
+                print(f"Failed to dispatch portfolio updated email: {e}")
         return user_portfolio_update
     except Exception as error:
         raise HTTPException(status_code=500, detail=str(error))
+
 
 
 

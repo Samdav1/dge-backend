@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h2>Wallet Debited 💳</h2>
+
+<p>Hi {{ name }},</p>
+
+<p>A debit transaction has occurred on your DGE World wallet.</p>
+
+<table class="details-table">
+    <tr>
+        <th>Amount Debited</th>
+        <td style="color: #ef4444; font-weight: 700;">-{{ amount }}</td>
+    </tr>
+    {% if description %}
+    <tr>
+        <th>Description</th>
+        <td>{{ description }}</td>
+    </tr>
+    {% endif %}
+    <tr>
+        <th>Reference ID</th>
+        <td>{{ reference }}</td>
+    </tr>
+    <tr>
+        <th>Date & Time</th>
+        <td>{{ date }}</td>
+    </tr>
+</table>
+
+<div class="cta-container">
+    <a href="{{ cta_link }}" class="cta-button">View Wallet Details</a>
+</div>
+{% endblock %}

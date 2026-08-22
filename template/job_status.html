@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h2>Job Update: {{ job_title }} 📌</h2>
+
+<p>Hi {{ name }},</p>
+
+<p>{{ message }}</p>
+
+<table class="details-table">
+    <tr>
+        <th>Job Title</th>
+        <td>{{ job_title }}</td>
+    </tr>
+    <tr>
+        <th>Current Status</th>
+        <td>{{ status_display }}</td>
+    </tr>
+    {% if reason %}
+    <tr>
+        <th>Details / Reason</th>
+        <td>{{ reason }}</td>
+    </tr>
+    {% endif %}
+</table>
+
+<div class="cta-container">
+    <a href="{{ cta_link }}" class="cta-button">View Job Details</a>
+</div>
+{% endblock %}

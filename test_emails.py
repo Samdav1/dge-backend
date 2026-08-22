@@ -10,133 +10,100 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 from app.services.email_notification_service import NotificationService
 
-# Mock classes to simulate the database models expected by the NotificationService
 class MockUser:
     def __init__(self, username, email):
         self.username = username
         self.email = email
         self.id = uuid.uuid4()
 
-class MockNegotiation:
-    def __init__(self, proposed_price_cents):
-        self.proposed_price_cents = proposed_price_cents
-        self.id = uuid.uuid4()
-
-class MockEscrow:
-    def __init__(self, amount_cents):
-        self.amount_cents = amount_cents
-        self.id = uuid.uuid4()
-
 def main():
     notifier = NotificationService()
     
-    # Target email address specified by the user
+    # Target test email address
     test_email = "adoxop1@gmail.com"
+    user = MockUser("JohnDoe", test_email)
     
-    # Two mock users that both point to the test email address
-    user1 = MockUser("JohnDoe", test_email)
-    user2 = MockUser("JaneSmith", test_email)
-    
-    print(f"Sending all test emails to: {test_email}\n")
+    print(f"--- Sending Newly Added Wallet & Transaction Email Notifications ---")
+    print(f"Target Recipient: {test_email}\n")
     
     try:
-        print("1. Sending welcome email...")
-        notifier.send_signup_welcome_mail(user1)
-        time.sleep(1) # Sleep to prevent rate limits or console spam
-        
-        print("2. Sending verification email...")
-        notifier.send_verification_email(user1, "test-token-12345")
-        time.sleep(1)
-        
-        print("3. Sending verification success email...")
-        notifier.send_verification_success_email(user1)
-        time.sleep(1)
-        
-        print("4. Sending deposit success email...")
-        notifier.send_deposit_success_mail(
-            user1, 1500000, "REF-12345", 
-            datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+        print("1. Sending Wallet Credit Notification (+₦50,000.00)...")
+        notifier.send_wallet_credit_mail(
+            user=user,
+            amount_cents=5000000,
+            reference="REF-CREDIT-9901",
+            description="Service Milestone Payout Credit"
         )
-        time.sleep(1)
-        
-        print("5. Sending withdrawal requested email (Pending)...")
-        notifier.send_withdrawal_status_mail(
-            user1, "pending", 500000, "GTBank", "0123456789"
-        )
-        time.sleep(1)
-        
-        print("6. Sending withdrawal processed email (Approved)...")
-        notifier.send_withdrawal_status_mail(
-            user1, "approved", 500000, "GTBank", "0123456789", "REF-W-123"
-        )
-        time.sleep(1)
-        
-        print("7. Sending withdrawal processed email (Rejected)...")
-        notifier.send_withdrawal_status_mail(
-            user1, "rejected", 500000, "GTBank", "0123456789", 
-            rejection_reason="Invalid account details."
-        )
-        time.sleep(1)
-        
-        print("8. Sending service purchase email (Buyer & Seller)...")
-        # This will send 2 emails (one to buyer, one to seller)
-        notifier.send_service_purchase_mail(
-            buyer=user1, seller=user2, 
-            service_title="Custom Web Development", 
-            amount_cents=7500000, order_id="ORD-999"
-        )
-        time.sleep(1)
-        
-        print("9. Sending project submitted email...")
-        notifier.send_project_submitted_mail(
-            client=user1, freelancer_name="JaneSmith", 
-            project_name="E-commerce Website", 
-            escrow_id=str(uuid.uuid4()), 
-            submission_date="2024-05-16 14:30"
-        )
-        time.sleep(1)
-        
-        print("10. Sending negotiation received email...")
-        neg = MockNegotiation(1200000)
-        notifier.send_price_negotiation_offer(receiver=user1, initiator=user2, negotiation=neg)
-        time.sleep(1)
-        
-        # --- Escrow Events ---
-        
-        escrow = MockEscrow(1200000)
-        
-        print("11. Sending escrow creation debit email...")
-        notifier.send_escrow_creation_debit(payer=user1, negotiation=neg)
-        time.sleep(1)
-        
-        print("12. Sending escrow creation emails (both parties)...")
-        notifier.send_escrow_creation_mail(payer=user1, payee=user2, escrow=escrow)
-        time.sleep(1)
-        
-        print("13. Sending escrow release credit email...")
-        notifier.send_escrow_release_credit(payee=user1, escrow=escrow)
-        time.sleep(1)
-        
-        print("14. Sending escrow refund email...")
-        notifier.send_escrow_refund_mail(payer=user1, escrow=escrow)
-        time.sleep(1)
-        
-        print("15. Sending escrow dispute email (both parties)...")
-        notifier.send_escrow_dispute_mail(payer=user1, payee=user2, escrow=escrow)
         time.sleep(1)
 
-        print("16. Sending job approved email...")
-        notifier.send_job_approved_mail(poster=user1, freelancer=user2, job_title="Fullstack Web App Development", price_cents=2500000)
+        print("2. Sending Wallet Debit Notification (-₦15,000.00)...")
+        notifier.send_wallet_debit_mail(
+            user=user,
+            amount_cents=1500000,
+            reference="REF-DEBIT-4402",
+            description="Job Application Fee & Escrow Deposit"
+        )
         time.sleep(1)
 
-        print("17. Sending negotiation status email (accepted)...")
-        notifier.send_negotiation_status_mail(target_user=user1, acting_user=user2, negotiation=neg, status="accepted")
-        
-        print("\nAll test emails dispatched successfully!")
+        print("3. Sending Transaction Status (Successful)...")
+        notifier.send_transaction_status_mail(
+            user=user,
+            status="successful",
+            amount_cents=2500000,
+            reference="TXN-SUCCESS-771",
+            transaction_type="Wallet Deposit",
+            description="Bank transfer deposit was confirmed."
+        )
+        time.sleep(1)
 
-        
+        print("4. Sending Transaction Status (Pending)...")
+        notifier.send_transaction_status_mail(
+            user=user,
+            status="pending",
+            amount_cents=1000000,
+            reference="TXN-PENDING-332",
+            transaction_type="Card Payment",
+            description="Awaiting gateway payment processing response."
+        )
+        time.sleep(1)
+
+        print("5. Sending Transaction Status (Failed / Declined)...")
+        notifier.send_transaction_status_mail(
+            user=user,
+            status="failed",
+            amount_cents=500000,
+            reference="TXN-FAILED-104",
+            transaction_type="Online Checkout",
+            failure_reason="Insufficient funds or card bank rejection."
+        )
+        time.sleep(1)
+
+        print("6. Sending Withdrawal Submitted (Pending)...")
+        notifier.send_withdrawal_status_mail(
+            user=user,
+            status="pending",
+            amount_cents=3500000,
+            bank_name="Guaranty Trust Bank (GTBank)",
+            account_number="0123456789"
+        )
+        time.sleep(1)
+
+        print("7. Sending Withdrawal Processed (Approved)...")
+        notifier.send_withdrawal_status_mail(
+            user=user,
+            status="approved",
+            amount_cents=3500000,
+            bank_name="Guaranty Trust Bank (GTBank)",
+            account_number="0123456789",
+            reference="WDR-SUCCESS-8819"
+        )
+
+        print("\n🎉 All newly added wallet & transaction email tests sent successfully!")
+
     except Exception as e:
         print(f"\nError occurred: {e}")
 
 if __name__ == "__main__":
     main()
+
+
