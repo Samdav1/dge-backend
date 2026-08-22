@@ -123,8 +123,17 @@ def main():
         
         print("15. Sending escrow dispute email (both parties)...")
         notifier.send_escrow_dispute_mail(payer=user1, payee=user2, escrow=escrow)
+        time.sleep(1)
+
+        print("16. Sending job approved email...")
+        notifier.send_job_approved_mail(poster=user1, freelancer=user2, job_title="Fullstack Web App Development", price_cents=2500000)
+        time.sleep(1)
+
+        print("17. Sending negotiation status email (accepted)...")
+        notifier.send_negotiation_status_mail(target_user=user1, acting_user=user2, negotiation=neg, status="accepted")
         
         print("\nAll test emails dispatched successfully!")
+
         
     except Exception as e:
         print(f"\nError occurred: {e}")

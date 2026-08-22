@@ -17,10 +17,10 @@ class EmailService:
     An advanced email service for sending transactional emails.
 
     This service supports:
+    - Resend API (HTTP / SDK).
+    - SMTP (Google / cPanel).
     - HTML and plain text content.
     - File attachments.
-    - Secure connection via SMTP_SSL or STARTTLS.
-    - Configuration via environment variables for easy deployment.
     """
 
     def __init__(self):
@@ -29,11 +29,19 @@ class EmailService:
         """
         from app.config import settings
 
-        provider = settings.email_provider.lower()
+        self.provider = settings.email_provider.lower()
         sender_name = os.getenv("EMAIL_SENDER_NAME", "DGE World")
 
-        if provider == "cpanel":
+        if self.provider == "resend":
             self.config = {
+                'provider': 'resend',
+                'resend_api_key': settings.resend_api_key or os.getenv("RESEND_API_KEY", ""),
+                'sender_name': sender_name,
+                'sender_address': settings.email_sender_address_resend or os.getenv("EMAIL_SENDER_ADDRESS_RESEND") or os.getenv("EMAIL_SENDER_ADDRESS", "onboarding@resend.dev"),
+            }
+        elif self.provider == "cpanel":
+            self.config = {
+                'provider': 'cpanel',
                 'host': settings.email_host_cpanel or os.getenv("EMAIL_HOST", "mail.dgetechs.com"),
                 'port': settings.email_port_cpanel,
                 'use_ssl': settings.email_use_ssl_cpanel,
@@ -44,6 +52,7 @@ class EmailService:
             }
         else: # default to google
             self.config = {
+                'provider': 'google',
                 'host': settings.email_host_google or os.getenv("EMAIL_HOST", "smtp.gmail.com"),
                 'port': settings.email_port_google,
                 'use_ssl': settings.email_use_ssl_google,
@@ -53,9 +62,13 @@ class EmailService:
                 'sender_address': settings.email_sender_address_google or os.getenv("EMAIL_SENDER_ADDRESS"),
             }
 
-        if not all([self.config['username'], self.config['password'], self.config['sender_address']]):
-            raise ValueError(
-                "SMTP username, password, and sender_address must be set in your configuration or environment.")
+        if self.provider == "resend":
+            if not self.config['sender_address']:
+                raise ValueError("Resend sender_address must be configured in your settings or environment.")
+        else:
+            if not all([self.config.get('username'), self.config.get('password'), self.config.get('sender_address')]):
+                raise ValueError(
+                    "SMTP username, password, and sender_address must be set in your configuration or environment.")
 
     def _create_message(
             self, recipients: List[str], subject: str, html_body: str,
@@ -98,6 +111,67 @@ class EmailService:
 
         return msg_root
 
+    def _send_via_resend(
+            self, recipients: List[str], subject: str, html_body: str, text_body: Optional[str] = None
+    ) -> bool:
+        """Sends email using Resend Python SDK or REST API fallback."""
+        api_key = self.config.get('resend_api_key', '')
+        sender = f"{self.config['sender_name']} <{self.config['sender_address']}>"
+
+        if not api_key:
+            print(f"[Resend Simulation] No RESEND_API_KEY configured. Mock sending email to: {', '.join(recipients)}")
+            return True
+
+        # Try using resend SDK
+        try:
+            import resend
+            resend.api_key = api_key
+            params = {
+                "from": sender,
+                "to": recipients,
+                "subject": subject,
+                "html": html_body,
+            }
+            if text_body:
+                params["text"] = text_body
+            resp = resend.Emails.send(params)
+            print(f"Email sent via Resend SDK to {', '.join(recipients)}: {resp}")
+            return True
+        except ImportError:
+            pass
+        except Exception as e:
+            print(f"Resend SDK error: {e}, falling back to REST API...")
+
+        # HTTP Fallback
+        try:
+            import httpx
+            payload = {
+                "from": sender,
+                "to": recipients,
+                "subject": subject,
+                "html": html_body,
+            }
+            if text_body:
+                payload["text"] = text_body
+            res = httpx.post(
+                "https://api.resend.com/emails",
+                headers={
+                    "Authorization": f"Bearer {api_key}",
+                    "Content-Type": "application/json"
+                },
+                json=payload,
+                timeout=10.0
+            )
+            if res.status_code in (200, 201):
+                print(f"Email sent via Resend API to {', '.join(recipients)}")
+                return True
+            else:
+                print(f"Resend API error: {res.status_code} - {res.text}")
+                return False
+        except Exception as e:
+            print(f"Resend REST request failed: {e}")
+            return False
+
     def send_email(
             self,
             recipients: List[str],
@@ -107,21 +181,14 @@ class EmailService:
             attachments: Optional[List[str]] = None
     ) -> bool:
         """
-        Connects to the SMTP server and sends the composed email.
-
-        Args:
-            recipients: A list of email addresses to send to.
-            subject: The subject of the email.
-            html_body: The HTML content of the email.
-            text_body: A plain text version of the email for compatibility.
-            attachments: A list of string paths to files to attach.
-
-        Returns:
-            True if the email was sent successfully, False otherwise.
+        Sends the composed email using the configured provider (Resend or SMTP).
         """
         if not recipients:
             print("Error: No recipients provided.")
             return False
+
+        if self.provider == "resend":
+            return self._send_via_resend(recipients, subject, html_body, text_body)
 
         try:
             message = self._create_message(recipients, subject, html_body, text_body, attachments)

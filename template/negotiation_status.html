@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h2>Price Negotiation Status Update 💬</h2>
+
+<p>Hi {{ name }},</p>
+
+<p><strong>{{ acting_user_name }}</strong> has updated the status of your price negotiation offer to <strong style="text-transform: uppercase;">{{ status }}</strong>.</p>
+
+<table class="details-table">
+    <tr>
+        <th>Status</th>
+        <td style="font-weight: bold;">{{ status_display }}</td>
+    </tr>
+    <tr>
+        <th>Updated By</th>
+        <td>{{ acting_user_name }}</td>
+    </tr>
+    {% if amount %}
+    <tr>
+        <th>Negotiated Price</th>
+        <td style="color: #0ea5e9; font-weight: bold;">{{ amount }}</td>
+    </tr>
+    {% endif %}
+</table>
+
+<p>{{ message }}</p>
+
+<div class="cta-container">
+    <a href="{{ cta_link }}" class="cta-button">View Negotiations</a>
+</div>
+{% endblock %}

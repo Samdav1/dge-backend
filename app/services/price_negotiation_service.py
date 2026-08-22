@@ -267,4 +267,36 @@ class PriceNegotiationService:
                 "negotiation_id": str(negotiation.id)
             })
 
+            # Dispatch email notification for negotiation update
+            try:
+                target_user, acting_user = await gather(
+                    self.repo.get_user_by_id(target_user_id),
+                    self.repo.get_user_by_id(user.id)
+                )
+                if target_user and acting_user:
+                    self.notification_service.send_negotiation_status_mail(
+                        target_user=target_user,
+                        acting_user=acting_user,
+                        negotiation=negotiation,
+                        status=payload.status,
+                        proposed_price_cents=payload.proposed_price_cents
+                    )
+
+                    # If this is job bid acceptance, also send job approved email to freelancer
+                    if payload.status == "accepted" and negotiation.posted_job_id:
+                        from app.repositories.posted_job_repo import PostedJobRepository
+                        job_repo = PostedJobRepository(db)
+                        job = await job_repo.get_by_id(negotiation.posted_job_id)
+                        if job:
+                            freelancer = target_user if negotiation.initiator_id == target_user.id else acting_user
+                            poster = acting_user if negotiation.initiator_id == target_user.id else target_user
+                            self.notification_service.send_job_approved_mail(
+                                poster=poster,
+                                freelancer=freelancer,
+                                job_title=job.title,
+                                price_cents=negotiation.proposed_price_cents
+                            )
+            except Exception as e:
+                print(f"Failed to send negotiation/job status email: {e}")
+
         return await self.repo.get_by_id(negotiation.id)

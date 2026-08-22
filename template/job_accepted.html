@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h2>Your Job Bid Has Been Accepted! 🎉</h2>
+
+<p>Hi {{ name }},</p>
+
+<p>Great news! Your bid on the job <strong>"{{ job_title }}"</strong> was accepted by <strong>{{ client_name }}</strong>.</p>
+
+<table class="details-table">
+    <tr>
+        <th>Job Title</th>
+        <td>{{ job_title }}</td>
+    </tr>
+    <tr>
+        <th>Agreed Price</th>
+        <td style="color: #10b981; font-weight: bold;">{{ amount }}</td>
+    </tr>
+    <tr>
+        <th>Client</th>
+        <td>{{ client_name }}</td>
+    </tr>
+</table>
+
+<p>The escrow for this job has been initialized. You can now communicate with the client and begin working on the project tasks.</p>
+
+<div class="cta-container">
+    <a href="{{ cta_link }}" class="cta-button">Go to Dashboard</a>
+</div>
+{% endblock %}

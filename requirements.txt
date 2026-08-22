@@ -29,3 +29,5 @@ celery
 agora-token-builder
 google-auth
 psycopg2-binary==2.9.10
+resend>=2.0.0
+

@@ -23,8 +23,12 @@ class Settings(BaseSettings):
     frontend_url: str = os.getenv("FRONTEND_URL", "http://localhost:3000")
     api_url: str = os.getenv("API_URL", "http://127.0.0.1:8000")
 
-    # SMTP Configuration Switcher
-    email_provider: str = os.getenv("EMAIL_PROVIDER", "google")
+    # SMTP / Resend Configuration Switcher
+    email_provider: str = os.getenv("EMAIL_PROVIDER", "resend")
+
+    # Resend Configuration
+    resend_api_key: str = os.getenv("RESEND_API_KEY", "")
+    email_sender_address_resend: str = os.getenv("EMAIL_SENDER_ADDRESS_RESEND", "onboarding@resend.dev")
 
     # Google SMTP Settings
     email_host_google: str = os.getenv("EMAIL_HOST_GOOGLE", "smtp.gmail.com")
@@ -41,6 +45,7 @@ class Settings(BaseSettings):
     username_cpanel: str = os.getenv("USERNAME_CPANEL", "")
     email_pass_cpanel: str = os.getenv("EMAIL_PASS_CPANEL", "")
     email_sender_address_cpanel: str = os.getenv("EMAIL_SENDER_ADDRESS_CPANEL", "")
+
 
     metamap_webhook_secret: str = os.getenv("METAMAP_WEBHOOK_SECRET", "")
     metamap_client_id: str = os.getenv("METAMAP_CLIENT_ID", "")

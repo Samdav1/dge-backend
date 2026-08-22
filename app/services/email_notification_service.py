@@ -357,3 +357,41 @@ class NotificationService:
         }
         self._render_and_dispatch('service_status.html', [user.email], subject, context)
 
+    def send_job_approved_mail(self, poster: Users, freelancer: Users, job_title: str, price_cents: int):
+        subject = f"Your Job Bid Was Accepted: '{job_title}' 🎉"
+        amount_formatted = f"₦{price_cents / 100:,.2f}"
+        context = {
+            'name': freelancer.username,
+            'client_name': poster.username,
+            'job_title': job_title,
+            'amount': amount_formatted,
+            'cta_link': f"{settings.frontend_url}/dashboard/my-jobs"
+        }
+        self._render_and_dispatch('job_accepted.html', [freelancer.email], subject, context)
+
+    def send_negotiation_status_mail(self, target_user: Users, acting_user: Users, negotiation, status: str, proposed_price_cents: int = None):
+        subject = f"Negotiation Update: Offer {status.capitalize()} by {acting_user.username}"
+        price_val = proposed_price_cents or getattr(negotiation, 'proposed_price_cents', None)
+        amount_formatted = f"₦{price_val / 100:,.2f}" if price_val else None
+
+        if status.lower() == "accepted":
+            msg = "Your price negotiation offer was accepted! An escrow transaction has been initiated."
+        elif status.lower() == "rejected":
+            msg = "Your price negotiation offer was declined."
+        elif status.lower() == "countered":
+            msg = f"{acting_user.username} sent a counter-offer for your negotiation."
+        else:
+            msg = f"Your price negotiation status has been updated to {status}."
+
+        context = {
+            'name': target_user.username,
+            'acting_user_name': acting_user.username,
+            'status': status,
+            'status_display': status.capitalize(),
+            'amount': amount_formatted,
+            'message': msg,
+            'cta_link': f"{settings.frontend_url}/dashboard/negotiations"
+        }
+        self._render_and_dispatch('negotiation_status.html', [target_user.email], subject, context)
+
+
