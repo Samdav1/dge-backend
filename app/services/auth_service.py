@@ -155,7 +155,7 @@ async def change_user_pass_service(user_pass: ChangeUserPass, db: AsyncSession):
             if not user:
                 raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User Not found")
 
-            user.password = user_pass.password
+            user.password = decrypt.hash(user_pass.password)
             db.add(user)
             await db.commit()
             await db.refresh(user)

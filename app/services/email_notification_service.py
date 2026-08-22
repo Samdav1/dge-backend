@@ -75,7 +75,7 @@ class NotificationService:
         subject = "Reset Your DGE World Password 🔐"
         username = getattr(user, 'username', 'Valued User')
         email = getattr(user, 'email', '')
-        reset_link = f"{settings.frontend_url}/auth/reset-password?token={token}"
+        reset_link = f"{settings.frontend_url}/reset-password?token={token}"
         context = {
             'name': username,
             'cta_link': reset_link
