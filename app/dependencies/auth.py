@@ -1,5 +1,6 @@
+from typing import Optional
 from fastapi import Depends, HTTPException, Request, Response
-from fastapi.security import HTTPBearer
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlmodel.ext.asyncio.session import AsyncSession
 from jose import JWTError, ExpiredSignatureError
 from app.core.security import get_access_token, decode_access_token, decode_refresh_token
@@ -13,6 +14,20 @@ from datetime import datetime, timezone, timedelta
 from app.repositories.refresh_token_repo import get_by_token
 
 security = HTTPBearer()
+security_optional = HTTPBearer(auto_error=False)
+
+async def get_optional_current_user(
+    request: Request,
+    response: Response,
+    token: Optional[HTTPAuthorizationCredentials] = Depends(security_optional),
+    db: AsyncSession = Depends(get_session),
+) -> Optional[UserRead]:
+    if not token or not token.credentials:
+        return None
+    try:
+        return await get_current_user(request=request, response=response, token=token, db=db)
+    except Exception:
+        return None
 
 async def get_current_user(
     request: Request,

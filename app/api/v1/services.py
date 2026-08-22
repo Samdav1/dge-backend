@@ -8,7 +8,8 @@ from app.repositories.services_repo import ServiceRepository
 from app.services.services_service import ServiceService
 from app.schemas.services import ServiceCreate, ServiceRead, ServiceUpdate, ServiceList, ServiceDetailRead
 from app.schemas.user import UserRead
-from app.dependencies.auth import get_current_user, verify_user_kyc
+from app.dependencies.auth import get_current_user, verify_user_kyc, get_optional_current_user
+
 
 router = APIRouter(prefix="/services", tags=["services"])
 
@@ -16,6 +17,7 @@ router = APIRouter(prefix="/services", tags=["services"])
 def get_service_service(db: AsyncSession = Depends(get_session)) -> ServiceService:
     repo = ServiceRepository(db)
     return ServiceService(repo)
+
 
 
 @router.post("/", response_model=ServiceRead)
@@ -76,15 +78,16 @@ async def list_services(
         limit: int = 100,
         sort_by: str = "newest",
         db: AsyncSession = Depends(get_session),
-        current_user: UserRead = Depends(get_current_user),
+        current_user: Optional[UserRead] = Depends(get_optional_current_user),
         service: ServiceService = Depends(get_service_service),
 ):
     from app.models.services import ServiceStatus, ServiceType  # local import
     status_enum = ServiceStatus(status) if status else None
     type_enum = ServiceType(type) if type else None
-    user_id = current_user.id if only_mine else None
+    user_id = (current_user.id if current_user else None) if only_mine else None
     results = await service.list_services(user_id=user_id, status=status_enum, type=type_enum, search=search, category_id=category_id, offset=offset, limit=limit, sort_by=sort_by)
     return results
+
 
 
 @router.get("/{service_id}", response_model=ServiceDetailRead)
