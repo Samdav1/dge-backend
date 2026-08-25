@@ -51,23 +51,32 @@ class NotificationService:
         }
         self._render_and_dispatch('welcome.html', [str(new_user.email)], subject, context)
 
-    def send_verification_email(self, new_user: UserRead, token: str):
+    def send_verification_email(self, new_user, token: str):
         subject = "Welcome to DGE World! Please Verify Your Email"
-        verification_link = f"{settings.api_url}/v1/users/verify-email?token={token}"
+        api_base = settings.api_url.rstrip("/") if settings.api_url else "https://dge.dgetechs.com"
+        verification_link = f"{api_base}/v1/users/verify-email?token={token}"
+        email = getattr(new_user, 'email', None)
+        if not email:
+            print("Cannot send verification email: missing user email")
+            return
+
         context = {
-            'name': new_user.username,
+            'name': getattr(new_user, 'username', 'Valued User'),
             'cta_link': verification_link
         }
-        self._render_and_dispatch('verify_email.html', [str(new_user.email)], subject, context)
+        self._render_and_dispatch('verify_email.html', [str(email)], subject, context)
 
     def send_verification_success_email(self, user):
         subject = "You're Verified! Welcome to DGE World 🎉"
-        username = getattr(user, 'username', 'Valued User')
-        email = getattr(user, 'email', '')
+        email = getattr(user, 'email', None)
+        if not email:
+            print("Cannot send verification success email: missing user email")
+            return
+
+        frontend_base = settings.frontend_url.rstrip("/") if settings.frontend_url else "https://dgespace.com"
         context = {
-            'name': username,
-            'cta_text': "Go to Your Dashboard",
-            'cta_link': f"{settings.frontend_url}/dashboard"
+            'name': getattr(user, 'username', 'Valued User'),
+            'cta_link': f"{frontend_base}/dashboard"
         }
         self._render_and_dispatch('welcome.html', [str(email)], subject, context)
 
