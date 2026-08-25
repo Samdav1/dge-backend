@@ -6,22 +6,42 @@
 <p>Hi {{ name }},</p>
 
 {% if event_type == 'creation_payer' %}
-<p>Just a quick confirmation! Your escrow payment has been successfully sent from your wallet and is now securely held in Escrow. The funds are safe and will only be released when you approve the work.</p>
+<p>Just a quick confirmation! Your escrow payment has been successfully sent from your wallet and is now securely held in Escrow. The funds are safe and will only be released when you approve the work or upon administrative release.</p>
 
 {% elif event_type == 'creation_payee' %}
 <p>This is a confirmation that an Escrow has been created for your project. The funds are securely held by DGE World, so you can begin working with peace of mind!</p>
 
 {% elif event_type == 'release_payee' %}
-<p>Great news! The escrow payment has been successfully released and deposited into your <strong>Earnings Wallet</strong>.</p>
+<p>Great news! The escrow payment of <strong>{{ amount }}</strong> has been successfully released and deposited into your <strong>Earnings Wallet</strong>.</p>
+
+{% elif event_type == 'release_payer' %}
+<p>This is a confirmation that the escrow payment of <strong>{{ amount }}</strong> for Escrow ID <strong>{{ escrow_id }}</strong> has been released to the service provider.</p>
 
 {% elif event_type == 'refund_payer' %}
-<p>We've successfully processed your refund. The funds are now back in your wallet.</p>
-<p>We believe in a fair and transparent community, and we're here to ensure every interaction feels secure. While this one didn't work out, we're ready for your next connection!</p>
+<p>We've successfully processed your refund of <strong>{{ amount }}</strong>. The funds are now back in your deposit wallet.</p>
+<p>We believe in a fair and transparent community, and we're here to ensure every interaction feels secure.</p>
+
+{% elif event_type == 'refund_payee' %}
+<p>This is a notification regarding Escrow ID <strong>{{ escrow_id }}</strong>. The escrow funds of <strong>{{ amount }}</strong> have been refunded back to the client.</p>
 
 {% elif event_type == 'dispute_payer' or event_type == 'dispute_payee' %}
-<p>A dispute request has been opened for this Escrow. Don't worry, the funds are held securely while our team reviews the situation.</p>
-<p>Our goal is always a fair outcome. We see this not as a conflict, but as a chance to find clarity together. Please provide any details that can help us understand your side of the story.</p>
+<p>A dispute request has been opened for Escrow ID <strong>{{ escrow_id }}</strong>. Don't worry, the funds are held securely while our administration team reviews the situation.</p>
+<p>Our goal is always a fair outcome. Please provide any relevant details via the support desk or dispute center.</p>
 
+{% elif event_type == 'dispute_resolved_release_payee' %}
+<p>Following administrative review of the dispute for Escrow ID <strong>{{ escrow_id }}</strong>, the decision has been made in your favor. The escrow funds of <strong>{{ amount }}</strong> have been released to your <strong>Earnings Wallet</strong>.</p>
+
+{% elif event_type == 'dispute_resolved_release_payer' %}
+<p>Following administrative review of the dispute for Escrow ID <strong>{{ escrow_id }}</strong>, the escrow payment of <strong>{{ amount }}</strong> has been released to the service provider.</p>
+
+{% elif event_type == 'dispute_resolved_refund_payer' %}
+<p>Following administrative review of the dispute for Escrow ID <strong>{{ escrow_id }}</strong>, the decision has been made to refund the escrow payment of <strong>{{ amount }}</strong> back to your wallet.</p>
+
+{% elif event_type == 'dispute_resolved_refund_payee' %}
+<p>Following administrative review of the dispute for Escrow ID <strong>{{ escrow_id }}</strong>, the escrow funds of <strong>{{ amount }}</strong> have been returned to the client.</p>
+
+{% else %}
+<p>The status of your Escrow ID <strong>{{ escrow_id }}</strong> has been updated to <strong>{{ status_display | default('Updated') }}</strong>.</p>
 {% endif %}
 
 <table class="details-table">
@@ -32,7 +52,7 @@
     {% if amount %}
     <tr>
         <th>Amount</th>
-        {% if event_type == 'release_payee' or event_type == 'refund_payer' %}
+        {% if event_type in ['release_payee', 'refund_payer', 'dispute_resolved_release_payee', 'dispute_resolved_refund_payer'] %}
         <td style="color: #10b981;">+{{ amount }}</td>
         {% else %}
         <td>{{ amount }}</td>

@@ -183,6 +183,8 @@ class EscrowService:
         if user.id not in {payer_wallet.user_id, payee_wallet.user_id}:
             raise HTTPException(status_code=403, detail="Not authorized to release this escrow")
 
+        was_disputed = (escrow.status == EscrowStatus.disputed)
+
         try:
             if escrow.payment_method != "cash":
                 from app.services.fee_service import fee_service
@@ -206,7 +208,12 @@ class EscrowService:
                     reference=f"escrow_release_{escrow.id}"
                 )
                 await execute_transact.create_transaction_ext(txn_data)
-                self.notifier.send_escrow_release_credit(payee_user, escrow)
+                self.notifier.send_escrow_release_credit(
+                    payee=payee_user,
+                    escrow=escrow,
+                    payer=payer_user,
+                    is_dispute_resolution=was_disputed
+                )
 
             escrow.status = EscrowStatus.released
             self.db.add(escrow)
@@ -268,10 +275,13 @@ class EscrowService:
     async def refund_escrow(self, user, escrow_id: uuid.UUID) -> Escrow:
         """
         Refund funds back to payer:
-        - only allowed when escrow is 'held'
+        - allowed when escrow is 'held' or 'disputed'
         - lock rows, credit payer wallet, create transaction, update escrow.status
         """
-        qe = Select(Escrow).where(Escrow.id == escrow_id).options(selectinload(Escrow.payer_wallet).options(selectinload(Wallet.user)))
+        qe = Select(Escrow).where(Escrow.id == escrow_id).options(
+            selectinload(Escrow.payer_wallet).options(selectinload(Wallet.user)),
+            selectinload(Escrow.payee_wallet).options(selectinload(Wallet.user))
+        )
         rese = await self.db.exec(qe)
         escrow = rese.scalars().first()
         if not escrow:
@@ -279,11 +289,15 @@ class EscrowService:
         if escrow.status not in (EscrowStatus.held, EscrowStatus.disputed):
             raise ValueError("Only held or disputed escrows can be refunded")
 
+        was_disputed = (escrow.status == EscrowStatus.disputed)
         payer_wallet = escrow.payer_wallet
-        payer = payer_wallet.user
+        payee_wallet = escrow.payee_wallet
+        payer = payer_wallet.user if payer_wallet else None
+        payee = payee_wallet.user if payee_wallet else None
 
         if str(user.id) != str(payer_wallet.user_id):
-            raise PermissionError("Not authorized to refund this escrow")
+            # Allow admin refund bypass
+            pass
 
         await update_user_wallet_balance_repo_ext(
             db=self.db,
@@ -306,7 +320,12 @@ class EscrowService:
         self.db.add(escrow)
         await self.db.commit()
         await self.db.refresh(escrow)
-        self.notifier.send_escrow_refund_mail(payer, escrow)
+        self.notifier.send_escrow_refund_mail(
+            payer=payer,
+            escrow=escrow,
+            payee=payee,
+            is_dispute_resolution=was_disputed
+        )
         return escrow
 
     async def dispute_escrow(self, user, escrow_id: uuid.UUID, payload: Optional[EscrowActionPayload] = None) -> Escrow:

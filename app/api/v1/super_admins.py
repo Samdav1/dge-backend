@@ -1892,6 +1892,22 @@ async def update_admin_escrow_status(
             esc.status = target_status
             db.add(esc)
             await db.commit()
+            
+            # Send notification to both parties for direct admin status updates
+            try:
+                from app.models.wallet import Wallet
+                from app.models.user import Users
+                payer_w = await db.get(Wallet, esc.payer_wallet_id)
+                payee_w = await db.get(Wallet, esc.payee_wallet_id)
+                payer_u = await db.get(Users, payer_w.user_id) if payer_w else None
+                payee_u = await db.get(Users, payee_w.user_id) if payee_w else None
+                
+                if target_status == EscrowStatus.disputed:
+                    esc_service.notifier.send_escrow_dispute_mail(payer_u, payee_u, esc)
+                else:
+                    esc_service.notifier.send_escrow_status_change_mail(payer_u, payee_u, esc, target_status.value)
+            except Exception as mail_err:
+                print(f"Failed to dispatch admin status change email: {mail_err}")
         
     return {"message": f"Escrow status updated to {new_status.upper()}"}
 

@@ -303,18 +303,35 @@ class NotificationService:
         }
         self._render_and_dispatch('escrow_event.html', [payer.email], subject, context)
 
-    def send_escrow_release_credit(self, payee: Users, escrow):
-        subject = "Escrow Funds Released"
-        context = {
-            'event_title': "Funds Released to Your Wallet!",
-            'event_type': 'release_payee',
+    def send_escrow_release_credit(self, payee: Users, escrow, payer: Users = None, is_dispute_resolution: bool = False):
+        amount_str = f"₦{escrow.amount_cents / 100:,.2f}"
+        
+        # Send to Payee
+        payee_event = 'dispute_resolved_release_payee' if is_dispute_resolution else 'release_payee'
+        payee_title = "Dispute Resolved: Escrow Funds Released!" if is_dispute_resolution else "Escrow Funds Released"
+        self._render_and_dispatch('escrow_event.html', [payee.email], payee_title, {
+            'event_title': payee_title,
+            'event_type': payee_event,
             'name': payee.username,
             'escrow_id': str(escrow.id),
-            'amount': f"₦{escrow.amount_cents / 100:,.2f}",
+            'amount': amount_str,
             'cta_text': "View Wallet",
             'cta_link': f"{settings.frontend_url}/dashboard/wallet"
-        }
-        self._render_and_dispatch('escrow_event.html', [payee.email], subject, context)
+        })
+
+        # Send to Payer if provided
+        if payer and hasattr(payer, 'email') and payer.email:
+            payer_event = 'dispute_resolved_release_payer' if is_dispute_resolution else 'release_payer'
+            payer_title = "Dispute Resolved: Escrow Payment Released" if is_dispute_resolution else "Escrow Payment Released"
+            self._render_and_dispatch('escrow_event.html', [payer.email], payer_title, {
+                'event_title': payer_title,
+                'event_type': payer_event,
+                'name': payer.username,
+                'escrow_id': str(escrow.id),
+                'amount': amount_str,
+                'cta_text': "View Escrow Details",
+                'cta_link': f"{settings.frontend_url}/dashboard/escrows"
+            })
 
     def send_escrow_creation_mail(self, payer: Users, payee: Users, escrow: Escrow):
         subject = "Escrow Creation"
@@ -342,41 +359,89 @@ class NotificationService:
         }
         self._render_and_dispatch('escrow_event.html', [payer.email], subject, payer_context)
 
-    def send_escrow_refund_mail(self, payer: Users, escrow: Escrow):
-        subject = f"Your Escrow Refund is Complete! (₦{escrow.amount_cents / 100:,.2f})"
-        context = {
-            'event_title': "Funds Returned!",
-            'event_type': 'refund_payer',
+    def send_escrow_refund_mail(self, payer: Users, escrow: Escrow, payee: Users = None, is_dispute_resolution: bool = False):
+        amount_str = f"₦{escrow.amount_cents / 100:,.2f}"
+
+        # Send to Payer
+        payer_event = 'dispute_resolved_refund_payer' if is_dispute_resolution else 'refund_payer'
+        payer_title = "Dispute Resolved: Escrow Refunded" if is_dispute_resolution else f"Your Escrow Refund is Complete! ({amount_str})"
+        self._render_and_dispatch('escrow_event.html', [payer.email], payer_title, {
+            'event_title': payer_title,
+            'event_type': payer_event,
             'name': payer.username,
             'escrow_id': str(escrow.id),
-            'amount': f"₦{escrow.amount_cents / 100:,.2f}",
+            'amount': amount_str,
             'cta_text': "View Your Wallet",
             'cta_link': f"{settings.frontend_url}/dashboard/wallet"
-        }
-        self._render_and_dispatch('escrow_event.html', [payer.email], subject, context)
+        })
+
+        # Send to Payee if provided
+        if payee and hasattr(payee, 'email') and payee.email:
+            payee_event = 'dispute_resolved_refund_payee' if is_dispute_resolution else 'refund_payee'
+            payee_title = "Dispute Resolved: Escrow Refunded to Client" if is_dispute_resolution else "Escrow Refunded to Client"
+            self._render_and_dispatch('escrow_event.html', [payee.email], payee_title, {
+                'event_title': payee_title,
+                'event_type': payee_event,
+                'name': payee.username,
+                'escrow_id': str(escrow.id),
+                'amount': amount_str,
+                'cta_text': "View Dashboard",
+                'cta_link': f"{settings.frontend_url}/dashboard"
+            })
 
     def send_escrow_dispute_mail(self, payer: Users, payee: Users, escrow: Escrow):
         subject = f"Action Required: A Dispute Has Been Opened (Escrow ID {escrow.id})"
 
         # Payer
-        self._render_and_dispatch('escrow_event.html', [payer.email], subject, {
-            'event_title': "We're Here to Help",
-            'event_type': 'dispute_payer',
-            'name': payer.username,
-            'escrow_id': str(escrow.id),
-            'cta_text': "Go to Dispute Center",
-            'cta_link': f"{settings.frontend_url}/dashboard/support"
-        })
+        if payer and hasattr(payer, 'email') and payer.email:
+            self._render_and_dispatch('escrow_event.html', [payer.email], subject, {
+                'event_title': "We're Here to Help",
+                'event_type': 'dispute_payer',
+                'name': payer.username,
+                'escrow_id': str(escrow.id),
+                'cta_text': "Go to Dispute Center",
+                'cta_link': f"{settings.frontend_url}/dashboard/support"
+            })
 
         # Payee
-        self._render_and_dispatch('escrow_event.html', [payee.email], subject, {
-            'event_title': "We're Here to Help",
-            'event_type': 'dispute_payee',
-            'name': payee.username,
-            'escrow_id': str(escrow.id),
-            'cta_text': "Go to Dispute Center",
-            'cta_link': f"{settings.frontend_url}/dashboard/support"
-        })
+        if payee and hasattr(payee, 'email') and payee.email:
+            self._render_and_dispatch('escrow_event.html', [payee.email], subject, {
+                'event_title': "We're Here to Help",
+                'event_type': 'dispute_payee',
+                'name': payee.username,
+                'escrow_id': str(escrow.id),
+                'cta_text': "Go to Dispute Center",
+                'cta_link': f"{settings.frontend_url}/dashboard/support"
+            })
+
+    def send_escrow_status_change_mail(self, payer: Users, payee: Users, escrow: Escrow, status_name: str):
+        subject = f"Escrow Status Updated to {status_name.upper()} (ID: {escrow.id})"
+        amount_str = f"₦{escrow.amount_cents / 100:,.2f}"
+
+        if payer and hasattr(payer, 'email') and payer.email:
+            self._render_and_dispatch('escrow_event.html', [payer.email], subject, {
+                'event_title': f"Escrow Status: {status_name.upper()}",
+                'event_type': 'status_update_payer',
+                'name': payer.username,
+                'escrow_id': str(escrow.id),
+                'amount': amount_str,
+                'status_display': status_name.upper(),
+                'cta_text': "View Escrows",
+                'cta_link': f"{settings.frontend_url}/dashboard/escrows"
+            })
+
+        if payee and hasattr(payee, 'email') and payee.email:
+            self._render_and_dispatch('escrow_event.html', [payee.email], subject, {
+                'event_title': f"Escrow Status: {status_name.upper()}",
+                'event_type': 'status_update_payee',
+                'name': payee.username,
+                'escrow_id': str(escrow.id),
+                'amount': amount_str,
+                'status_display': status_name.upper(),
+                'cta_text': "View Escrows",
+                'cta_link': f"{settings.frontend_url}/dashboard/escrows"
+            })
+
 
     # ─── Rides ──────────────────────────────────────────────────────────────
 
