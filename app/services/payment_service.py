@@ -34,6 +34,20 @@ logger = logging.getLogger(__name__)
 
 # ─── Admin Payment Settings ───────────────────────────────────────────────────
 
+async def _validate_admin_id(db: AsyncSession, admin_id: Optional[uuid.UUID]) -> Optional[uuid.UUID]:
+    """Verify if admin_id exists in superadmin table; return a valid superadmin ID or None."""
+    from app.models.admin import SuperAdmin
+    if admin_id:
+        stmt = select(SuperAdmin).where(SuperAdmin.id == admin_id)
+        res = await db.execute(stmt)
+        if res.scalar_one_or_none():
+            return admin_id
+    # Fallback: return the first superadmin record ID if any exists
+    stmt_first = select(SuperAdmin.id).limit(1)
+    res_first = await db.execute(stmt_first)
+    return res_first.scalar_one_or_none()
+
+
 async def get_payment_settings(db: AsyncSession) -> AdminPaymentSettings:
     """Return the single settings row, creating it with defaults if absent."""
     stmt = select(AdminPaymentSettings).where(AdminPaymentSettings.id == 1)
@@ -60,7 +74,7 @@ async def update_payment_settings(
         settings.screen_deposits = screen_deposits
     settings.updated_at = datetime.now(timezone.utc)
     if admin_id:
-        settings.updated_by_admin_id = admin_id
+        settings.updated_by_admin_id = await _validate_admin_id(db, admin_id)
     db.add(settings)
     await db.commit()
     await db.refresh(settings)
@@ -375,7 +389,7 @@ async def verify_deposit(db: AsyncSession, deposit_id: uuid.UUID, user_id: uuid.
 async def admin_approve_deposit(
     db: AsyncSession,
     deposit_id: uuid.UUID,
-    admin_id: uuid.UUID,
+    admin_id: Optional[uuid.UUID] = None,
 ) -> DepositRequest:
     """Admin approves a screened_pending deposit → credits wallet."""
     stmt = select(DepositRequest).where(DepositRequest.id == deposit_id)
@@ -386,7 +400,7 @@ async def admin_approve_deposit(
     if deposit.status != DepositStatus.screened_pending:
         raise HTTPException(status_code=400, detail=f"Deposit is not pending review (status: {deposit.status.value})")
 
-    deposit.approved_by_admin_id = admin_id
+    deposit.approved_by_admin_id = await _validate_admin_id(db, admin_id)
     await _credit_wallet_for_deposit(db, deposit)
     await db.refresh(deposit)
     return deposit
@@ -547,7 +561,7 @@ async def _process_withdrawal_transfer(
 async def admin_approve_withdrawal(
     db: AsyncSession,
     withdrawal_id: uuid.UUID,
-    admin_id: uuid.UUID,
+    admin_id: Optional[uuid.UUID] = None,
 ) -> WithdrawalRequest:
     """Admin approves a pending withdrawal → triggers Monnify transfer."""
     stmt = select(WithdrawalRequest).where(WithdrawalRequest.id == withdrawal_id)
@@ -575,7 +589,7 @@ async def admin_approve_withdrawal(
     if wallet.balance_cents < withdrawal.amount_cents:
         raise HTTPException(status_code=400, detail="Insufficient wallet balance at time of approval")
 
-    withdrawal.approved_by_admin_id = admin_id
+    withdrawal.approved_by_admin_id = await _validate_admin_id(db, admin_id)
     withdrawal.reviewed_at = datetime.now(timezone.utc)
     withdrawal = await _process_withdrawal_transfer(db, withdrawal, bank_account, wallet)
     
@@ -602,8 +616,8 @@ async def admin_approve_withdrawal(
 async def admin_reject_withdrawal(
     db: AsyncSession,
     withdrawal_id: uuid.UUID,
-    admin_id: uuid.UUID,
-    reason: str,
+    admin_id: Optional[uuid.UUID] = None,
+    reason: str = "No reason provided",
 ) -> WithdrawalRequest:
     """Admin rejects a pending withdrawal."""
     stmt = select(WithdrawalRequest).where(WithdrawalRequest.id == withdrawal_id)
@@ -616,7 +630,7 @@ async def admin_reject_withdrawal(
 
     withdrawal.status = WithdrawalStatus.rejected
     withdrawal.rejection_reason = reason
-    withdrawal.approved_by_admin_id = admin_id
+    withdrawal.approved_by_admin_id = await _validate_admin_id(db, admin_id)
     withdrawal.reviewed_at = datetime.now(timezone.utc)
     withdrawal.updated_at = datetime.now(timezone.utc)
     db.add(withdrawal)

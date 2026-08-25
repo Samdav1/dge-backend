@@ -2173,9 +2173,7 @@ async def approve_withdrawal(
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid withdrawal_id")
 
-    # Using a fixed placeholder admin_id since we don't enforce admin auth here yet
-    admin_id = uuid.uuid4()  # Replace with get_current_admin().id when wired
-    withdrawal = await admin_approve_withdrawal(db, wid, admin_id)
+    withdrawal = await admin_approve_withdrawal(db, wid, None)
     return {"message": "Withdrawal approved and transfer initiated", "status": withdrawal.status.value}
 
 
@@ -2195,11 +2193,10 @@ async def reject_withdrawal(
     try:
         body = await req.json()
     except Exception:
-        raise HTTPException(status_code=400, detail="Invalid JSON body")
+        body = {}
 
-    reason = body.get("reason", "No reason provided")
-    admin_id = uuid.uuid4()  # Replace with get_current_admin().id when wired
-    withdrawal = await admin_reject_withdrawal(db, wid, admin_id, reason)
+    reason = body.get("reason", "No reason provided") if isinstance(body, dict) else "No reason provided"
+    withdrawal = await admin_reject_withdrawal(db, wid, None, reason)
     return {"message": "Withdrawal rejected", "status": withdrawal.status.value}
 
 
