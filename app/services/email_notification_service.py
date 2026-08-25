@@ -53,8 +53,8 @@ class NotificationService:
 
     def send_verification_email(self, new_user, token: str):
         subject = "Welcome to DGE World! Please Verify Your Email"
-        api_base = settings.api_url.rstrip("/") if settings.api_url else "https://dge.dgetechs.com"
-        verification_link = f"{api_base}/v1/users/verify-email?token={token}"
+        frontend_base = settings.frontend_url.rstrip("/") if settings.frontend_url else "https://dgespace.com"
+        verification_link = f"{frontend_base}/verify-email?token={token}"
         email = getattr(new_user, 'email', None)
         if not email:
             print("Cannot send verification email: missing user email")
