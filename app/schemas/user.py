@@ -35,6 +35,8 @@ class UserRead(UserBase):
     status: UserStatus
     referral_code: Optional[str]
     is_admin: bool = False
+    email_verified: bool = False
+    google_auth: bool = False
 
     model_config = ConfigDict(from_attributes=True)
 class UserReadWithProfile(UserRead):

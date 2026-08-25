@@ -166,3 +166,16 @@ async def verify_user_kyc(
             detail="KYC verification required to perform this action"
         )
     return current_user
+
+async def verify_user_email(
+    current_user: UserRead = Depends(get_current_user),
+):
+    if getattr(current_user, "is_admin", False):
+        return current_user
+    
+    if not getattr(current_user, "email_verified", False) and not getattr(current_user, "google_auth", False):
+        raise HTTPException(
+            status_code=403,
+            detail="Email verification required. Please verify your email address before performing this action."
+        )
+    return current_user

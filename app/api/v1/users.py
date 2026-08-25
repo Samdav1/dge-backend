@@ -18,6 +18,10 @@ from app import schemas
 router = APIRouter()
 
 
+@router.get("/me", response_model=UserRead)
+async def get_current_user_me(user: UserRead = Depends(get_current_user)):
+    return user
+
 @router.get("/")
 async def get_users():
     return {'user': ['samuel', 'Esther', 'Solomon']}

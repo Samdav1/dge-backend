@@ -8,7 +8,7 @@ from app.repositories.services_repo import ServiceRepository
 from app.services.services_service import ServiceService
 from app.schemas.services import ServiceCreate, ServiceRead, ServiceUpdate, ServiceList, ServiceDetailRead
 from app.schemas.user import UserRead
-from app.dependencies.auth import get_current_user, verify_user_kyc, get_optional_current_user
+from app.dependencies.auth import get_current_user, verify_user_kyc, get_optional_current_user, verify_user_email
 
 
 router = APIRouter(prefix="/services", tags=["services"])
@@ -34,6 +34,7 @@ async def create_service(
         image: Optional[UploadFile] = File(None),
         db: AsyncSession = Depends(get_session),
         current_user: UserRead = Depends(verify_user_kyc),
+        _email_check: UserRead = Depends(verify_user_email),
         service: ServiceService = Depends(get_service_service),
 ):
     try:

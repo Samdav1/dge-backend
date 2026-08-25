@@ -3,7 +3,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from typing import List, Optional
 import uuid
 from app.db.session import get_session
-from app.dependencies.auth import get_current_user
+from app.dependencies.auth import get_current_user, verify_user_email
 from app.schemas.escrow import EscrowCreate, EscrowRead, EscrowActionResponse, EscrowActionPayload
 from app.schemas.user import UserRead
 from app.services.escrow_service import EscrowService
@@ -19,6 +19,7 @@ def get_escrow_service(db: AsyncSession = Depends(get_session)):
 async def create_escrow(
     payload: EscrowCreate,
     current_user: UserRead = Depends(get_current_user),
+    _email_check: UserRead = Depends(verify_user_email),
     db: AsyncSession = Depends(get_session),
     service: EscrowService = Depends(get_escrow_service),
 ):
