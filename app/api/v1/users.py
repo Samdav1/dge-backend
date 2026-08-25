@@ -81,7 +81,7 @@ async def verify_email_via_link(token: str, db: AsyncSession = Depends(get_sessi
     GET endpoint for the email verification link.
     Verifies the token and redirects the user to the frontend email-verified page.
     """
-    frontend_base = settings.frontend_url.rstrip("/") if settings.frontend_url else "https://dgespace.com"
+    frontend_base = settings.frontend_url.rstrip("/") if (settings.frontend_url and "localhost" not in settings.frontend_url and "127.0.0.1" not in settings.frontend_url) else "https://dgespace.com"
     try:
         await verify_user_email_verification_token(token=token, db=db)
         return RedirectResponse(url=f"{frontend_base}/email-verified")
