@@ -481,6 +481,7 @@ async def create_admin_notification(
     from app.models.notifications import AdminNotification, Notification, NotificationType
     from app.models.user import Users, UserStatus, KYCStatus
     from app.services.email_notification_service import NotificationService
+    from app.config import settings
     from sqlmodel import select
 
     try:
@@ -523,22 +524,25 @@ async def create_admin_notification(
 
     for u in target_users:
         if send_push:
-            n = Notification(
-                user_id=u.id,
-                title=title,
-                content=message,
-                type=NotificationType.SYSTEM,
-                is_read=False
-            )
-            db.add(n)
+            try:
+                n = Notification(
+                    user_id=u.id,
+                    message=f"{title}: {message}",
+                    type=NotificationType.general,
+                    is_read=False
+                )
+                db.add(n)
+            except Exception as notif_err:
+                print(f"Failed to create push notification record for user {u.id}: {notif_err}")
 
         if send_email and getattr(u, 'email', None):
             try:
+                frontend_base = getattr(settings, 'frontend_url', 'https://dgespace.com')
                 context = {
                     'name': getattr(u, 'username', 'Valued User'),
                     'title': title,
                     'message': message,
-                    'cta_link': f"{settings.frontend_url}/dashboard"
+                    'cta_link': f"{frontend_base}/dashboard"
                 }
                 notifier._render_and_dispatch('ticket_notification.html', [str(u.email)], f"[DGE Announcement] {title}", context)
             except Exception as mail_err:
