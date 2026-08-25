@@ -169,8 +169,8 @@ class EscrowService:
         if not escrow:
             raise HTTPException(status_code=404, detail="Escrow not found")
 
-        if escrow.status != EscrowStatus.held:
-            raise HTTPException(status_code=400, detail="Only held escrows can be released")
+        if escrow.status not in (EscrowStatus.held, EscrowStatus.disputed):
+            raise HTTPException(status_code=400, detail="Only held or disputed escrows can be released")
 
         payee_wallet = escrow.payee_wallet
         payer_wallet = escrow.payer_wallet
@@ -276,8 +276,8 @@ class EscrowService:
         escrow = rese.scalars().first()
         if not escrow:
             raise ValueError("Escrow not found")
-        if escrow.status != EscrowStatus.held:
-            raise ValueError("Only held escrows can be refunded")
+        if escrow.status not in (EscrowStatus.held, EscrowStatus.disputed):
+            raise ValueError("Only held or disputed escrows can be refunded")
 
         payer_wallet = escrow.payer_wallet
         payer = payer_wallet.user

@@ -854,13 +854,17 @@ async def get_admin_user_escrows(user_id: str, db: AsyncSession = Depends(get_se
     """Return all escrows involving a user via their wallets."""
     from app.models.escrow import Escrow
     from app.models.wallet import Wallet
+    from app.models.user import Users
+    from app.models.price_negotiation import PriceNegotiation
+    from app.models.services import Service
+    from app.models.posted_job import PostedJob
     from sqlmodel import select, or_
+    from sqlalchemy.orm import aliased
     try:
         uid = uuid.UUID(user_id)
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid user_id")
 
-    # Escrow links to Wallet, not directly to User. Find user's wallet IDs first.
     wallet_res = await db.execute(select(Wallet).where(Wallet.user_id == uid))
     wallets = wallet_res.scalars().all()
     wallet_ids = [w.id for w in wallets]
@@ -868,23 +872,40 @@ async def get_admin_user_escrows(user_id: str, db: AsyncSession = Depends(get_se
     if not wallet_ids:
         return []
 
+    PayerWallet = aliased(Wallet)
+    PayerUser = aliased(Users)
+    PayeeWallet = aliased(Wallet)
+    PayeeUser = aliased(Users)
+
     res = await db.execute(
-        select(Escrow).where(
+        select(Escrow, PriceNegotiation, Service, PostedJob, PayerUser, PayeeUser)
+        .outerjoin(PriceNegotiation, Escrow.payment_negotiation_id == PriceNegotiation.id)
+        .outerjoin(Service, PriceNegotiation.service_id == Service.id)
+        .outerjoin(PostedJob, PriceNegotiation.posted_job_id == PostedJob.id)
+        .outerjoin(PayerWallet, Escrow.payer_wallet_id == PayerWallet.id)
+        .outerjoin(PayerUser, PayerWallet.user_id == PayerUser.id)
+        .outerjoin(PayeeWallet, Escrow.payee_wallet_id == PayeeWallet.id)
+        .outerjoin(PayeeUser, PayeeWallet.user_id == PayeeUser.id)
+        .where(
             or_(Escrow.payer_wallet_id.in_(wallet_ids), Escrow.payee_wallet_id.in_(wallet_ids))
         ).order_by(Escrow.created_at.desc())
     )
-    escrows = res.scalars().all()
-    return [
-        {
+    rows = res.all()
+
+    items = []
+    for e, neg, svc, p_job, payer, payee in rows:
+        title = svc.name if svc else (p_job.title if p_job else f"Escrow #{str(e.id)[:8].upper()}")
+        is_payer = e.payer_wallet_id in wallet_ids
+        counterparty = (payee.username if payee else "Payee") if is_payer else (payer.username if payer else "Payer")
+        items.append({
             "id": str(e.id),
-            "title": f"Escrow #{str(e.id)[:8].upper()}",
-            "counterparty": str(e.payee_wallet_id)[:8] if e.payer_wallet_id in wallet_ids else str(e.payer_wallet_id)[:8],
+            "title": title,
+            "counterparty": counterparty,
             "amount": f"\u20a6{e.amount_cents / 100:,.2f}",
             "date": e.created_at.strftime("%d/%m/%Y") if e.created_at else "",
             "status": e.status.value.upper() if hasattr(e.status, "value") else str(e.status).upper(),
-        }
-        for e in escrows
-    ]
+        })
+    return items
 
 
 @router.get("/admin-users/{user_id}/reviews")
@@ -1652,6 +1673,7 @@ async def delete_negotiation(
 @router.get("/admin-escrows")
 async def list_admin_escrows(
     status: Optional[str] = None,
+    search: Optional[str] = None,
     page: int = 1,
     limit: int = 50,
     db: AsyncSession = Depends(get_session),
@@ -1679,14 +1701,42 @@ async def list_admin_escrows(
         .outerjoin(PayerUser, PayerWallet.user_id == PayerUser.id)\
         .outerjoin(PayeeWallet, Escrow.payee_wallet_id == PayeeWallet.id)\
         .outerjoin(PayeeUser, PayeeWallet.user_id == PayeeUser.id)
+
+    count_stmt = select(func.count(Escrow.id)).select_from(Escrow)\
+        .outerjoin(PriceNegotiation, Escrow.payment_negotiation_id == PriceNegotiation.id)\
+        .outerjoin(Service, PriceNegotiation.service_id == Service.id)\
+        .outerjoin(PostedJob, PriceNegotiation.posted_job_id == PostedJob.id)\
+        .outerjoin(PayerWallet, Escrow.payer_wallet_id == PayerWallet.id)\
+        .outerjoin(PayerUser, PayerWallet.user_id == PayerUser.id)\
+        .outerjoin(PayeeWallet, Escrow.payee_wallet_id == PayeeWallet.id)\
+        .outerjoin(PayeeUser, PayeeWallet.user_id == PayeeUser.id)
         
     if status and status.lower() != "all":
         try:
-            stmt = stmt.where(Escrow.status == EscrowStatus(status.lower()))
+            target_status = EscrowStatus(status.lower())
+            stmt = stmt.where(Escrow.status == target_status)
+            count_stmt = count_stmt.where(Escrow.status == target_status)
         except Exception:
             pass
+
+    if search:
+        search_term = f"%{search.strip()}%"
+        search_filter = (
+            PayerUser.username.ilike(search_term) |
+            PayeeUser.username.ilike(search_term) |
+            Service.name.ilike(search_term) |
+            PostedJob.title.ilike(search_term)
+        )
+        try:
+            search_uuid = uuid.UUID(search.strip())
+            search_filter = search_filter | (Escrow.id == search_uuid)
+        except Exception:
+            pass
+
+        stmt = stmt.where(search_filter)
+        count_stmt = count_stmt.where(search_filter)
             
-    total_res = await db.execute(select(func.count()).select_from(stmt.subquery()))
+    total_res = await db.execute(count_stmt)
     total = total_res.scalar() or 0
     
     stmt = stmt.order_by(Escrow.created_at.desc()).offset((page - 1) * limit).limit(limit)
@@ -1827,13 +1877,13 @@ async def update_admin_escrow_status(
         from app.services.escrow_service import EscrowService
         esc_service = EscrowService(db)
         
-        if esc.status == EscrowStatus.held and target_status == EscrowStatus.released:
+        if esc.status in (EscrowStatus.held, EscrowStatus.disputed) and target_status == EscrowStatus.released:
             # Retrieve payer user context
             from app.models.wallet import Wallet
             payer_w = await db.get(Wallet, esc.payer_wallet_id)
             admin_user = type("AdminUser", (), {"id": payer_w.user_id if payer_w else esc.payer_wallet_id})()
             await esc_service.release_escrow(user=admin_user, escrow_id=esc.id)
-        elif esc.status == EscrowStatus.held and target_status == EscrowStatus.refunded:
+        elif esc.status in (EscrowStatus.held, EscrowStatus.disputed) and target_status == EscrowStatus.refunded:
             from app.models.wallet import Wallet
             payer_w = await db.get(Wallet, esc.payer_wallet_id)
             admin_user = type("AdminUser", (), {"id": payer_w.user_id if payer_w else esc.payer_wallet_id})()
