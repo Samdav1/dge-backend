@@ -1743,15 +1743,46 @@ async def list_admin_escrows(
     res = await db.execute(stmt)
     rows = res.all()
     
+    from app.services.fee_service import fee_service
+    from app.models.admin import PlatformRevenueLog
+
+    fee_config = await fee_service.get_fee_config(db)
+
     items = []
     for esc, neg, svc, p_job, payer, payee in rows:
         service_name = svc.name if svc else (p_job.title if p_job else "Escrow Service")
+
+        # Fee & Net released calculation
+        fee_log_stmt = select(PlatformRevenueLog).where(
+            PlatformRevenueLog.reference == str(esc.id),
+            PlatformRevenueLog.event_type == "escrow_release"
+        )
+        fee_log_res = await db.execute(fee_log_stmt)
+        fee_log = fee_log_res.scalar_one_or_none()
+
+        if fee_log:
+            fee_cents = fee_log.fee_amount_cents
+        elif fee_config.escrow_release_fee_enabled:
+            fee_cents = fee_service.calculate_fee(
+                esc.amount_cents,
+                fee_config.escrow_release_fee_type,
+                fee_config.escrow_release_fee_value
+            )
+        else:
+            fee_cents = 0
+
+        net_released_cents = max(0, esc.amount_cents - fee_cents)
+
         items.append({
             "id": str(esc.id),
             "service_name": service_name,
             "payer_name": payer.username if payer else "Payer",
             "payee_name": payee.username if payee else "Payee",
             "amount": f"₦{esc.amount_cents / 100:,.2f}",
+            "fee_amount": f"₦{fee_cents / 100:,.2f}",
+            "released_amount": f"₦{net_released_cents / 100:,.2f}",
+            "fee_cents": fee_cents,
+            "net_released_cents": net_released_cents,
             "status": esc.status.value.upper() if hasattr(esc.status, "value") else str(esc.status).upper(),
             "created_at": esc.created_at.strftime("%d/%m/%Y") if esc.created_at else "—",
         })
@@ -1785,6 +1816,8 @@ async def get_admin_escrow_detail(
     from app.models.posted_job import PostedJob
     from app.models.user import Users
     from app.models.wallet import Wallet
+    from app.models.admin import PlatformRevenueLog
+    from app.services.fee_service import fee_service
     from sqlmodel import select
     from sqlalchemy.orm import aliased
     
@@ -1820,10 +1853,37 @@ async def get_admin_escrow_detail(
     service_name = svc.name if svc else (p_job.title if p_job else "Escrow Service")
     service_desc = svc.description if svc else (p_job.description if p_job else "Direct escrow payment")
     service_price = f"₦{svc.price:,.2f}" if svc else f"₦{esc.amount_cents / 100:,.2f}"
+
+    # Platform fee & net released payout calculation
+    fee_log_stmt = select(PlatformRevenueLog).where(
+        PlatformRevenueLog.reference == str(esc.id),
+        PlatformRevenueLog.event_type == "escrow_release"
+    )
+    fee_log_res = await db.execute(fee_log_stmt)
+    fee_log = fee_log_res.scalar_one_or_none()
+
+    if fee_log:
+        fee_cents = fee_log.fee_amount_cents
+    else:
+        fee_config = await fee_service.get_fee_config(db)
+        if fee_config.escrow_release_fee_enabled:
+            fee_cents = fee_service.calculate_fee(
+                esc.amount_cents,
+                fee_config.escrow_release_fee_type,
+                fee_config.escrow_release_fee_value
+            )
+        else:
+            fee_cents = 0
+
+    net_released_cents = max(0, esc.amount_cents - fee_cents)
     
     return {
         "id": str(esc.id),
         "amount": f"₦{esc.amount_cents / 100:,.2f}",
+        "fee_amount": f"₦{fee_cents / 100:,.2f}",
+        "released_amount": f"₦{net_released_cents / 100:,.2f}",
+        "fee_cents": fee_cents,
+        "net_released_cents": net_released_cents,
         "status": esc.status.value.upper() if hasattr(esc.status, "value") else str(esc.status).upper(),
         "created_at": esc.created_at.strftime("%d/%m/%Y %H:%M:%S") if esc.created_at else "—",
         "updated_at": esc.updated_at.strftime("%d/%m/%Y %H:%M:%S") if esc.updated_at else "—",
@@ -2357,6 +2417,11 @@ async def get_platform_revenue(
             "created_at": log.created_at.isoformat() if log.created_at else None,
         })
 
+    # Category breakdown stats
+    escrow_rev = (await db.execute(select(func.sum(PlatformRevenueLog.fee_amount_cents)).where(PlatformRevenueLog.event_type == "escrow_release"))).scalar() or 0
+    deposit_rev = (await db.execute(select(func.sum(PlatformRevenueLog.fee_amount_cents)).where(PlatformRevenueLog.event_type == "deposit"))).scalar() or 0
+    withdrawal_rev = (await db.execute(select(func.sum(PlatformRevenueLog.fee_amount_cents)).where(PlatformRevenueLog.event_type == "withdrawal"))).scalar() or 0
+
     return {
         "revenue_logs": rows,
         "total_count": total_count,
@@ -2366,9 +2431,15 @@ async def get_platform_revenue(
             "total_all_time": total_all_time,
             "total_this_month": total_this_month,
             "total_today": total_today,
+            "total_escrow_revenue": escrow_rev,
+            "total_deposit_revenue": deposit_rev,
+            "total_withdrawal_revenue": withdrawal_rev,
             "total_all_time_formatted": f"₦{total_all_time / 100:,.2f}",
             "total_this_month_formatted": f"₦{total_this_month / 100:,.2f}",
             "total_today_formatted": f"₦{total_today / 100:,.2f}",
+            "total_escrow_revenue_formatted": f"₦{escrow_rev / 100:,.2f}",
+            "total_deposit_revenue_formatted": f"₦{deposit_rev / 100:,.2f}",
+            "total_withdrawal_revenue_formatted": f"₦{withdrawal_rev / 100:,.2f}",
         }
     }
 
