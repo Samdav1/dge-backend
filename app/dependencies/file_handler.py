@@ -172,11 +172,11 @@ async def save_kyc_image(file: UploadFile):
     :param file:
     :return:
     """
-    if not file.content_type.startswith("image/"):
+    ext = os.path.splitext(file.filename or "")[1].lower()
+    if (file.content_type and not file.content_type.startswith("image/")) and ext not in {".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp"}:
         raise HTTPException(status_code=400, detail="Only image files are allowed.")
 
-    extension = os.path.splitext(file.filename)[1]
-    unique_filename = f"{uuid.uuid4()}{extension}"
+    unique_filename = f"{uuid.uuid4()}{ext or '.jpg'}"
     file_path = os.path.join(KYC_UPLOAD_DIR, unique_filename)
 
     try:

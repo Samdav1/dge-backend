@@ -225,9 +225,8 @@ async def upload_driver_license_picture(
         raise HTTPException(status_code=400, detail="Failed to save license picture file.")
 
     driver_profile.license_picture_url = picture_path
-    if driver_profile.license_number:
-        driver_profile.license_status = "pending"
-        driver_profile.license_rejection_reason = None
+    driver_profile.license_status = "pending"
+    driver_profile.license_rejection_reason = None
         
     db.add(driver_profile)
     await db.commit()

@@ -39,7 +39,7 @@ class DriverService:
 
         license_number = getattr(payload, "license_number", None)
         license_picture_url = getattr(payload, "license_picture_url", None)
-        license_status = "pending" if (license_number and license_picture_url) else "unverified"
+        license_status = "pending" if (license_number or license_picture_url) else "unverified"
 
         new_driver = DriverProfile(
             user_id=user.id,
@@ -98,7 +98,7 @@ class DriverService:
         if "license_number" in update_data or "license_picture_url" in update_data:
             val_number = update_data.get("license_number", current_profile.license_number)
             val_pic = update_data.get("license_picture_url", current_profile.license_picture_url)
-            if val_number and val_pic:
+            if val_number or val_pic:
                 current_profile.license_status = "pending"
                 current_profile.license_rejection_reason = None
 

@@ -534,6 +534,20 @@ class NotificationService:
         }
         self._render_and_dispatch('kyc_status.html', [user.email], subject, context)
 
+    def send_driver_license_status_mail(self, user: Users, status: str, rejection_reason: str = None):
+        if status in ["verified", "approved"]:
+            subject = "Driver License Verification Approved 🎉 - DGE World"
+        else:
+            subject = "Driver License Verification Update - DGE World"
+
+        context = {
+            'name': user.username,
+            'status': status,
+            'rejection_reason': rejection_reason,
+            'cta_link': f"{settings.frontend_url}/dashboard/profile?tab=driver"
+        }
+        self._render_and_dispatch('kyc_status.html', [user.email], subject, context)
+
     def send_service_status_mail(self, user: Users, service, status: str):
         if status in ["approved", "ACTIVE"]:
             subject = f"Service Approved: '{service.name}' 🎉"

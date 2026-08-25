@@ -1099,12 +1099,13 @@ async def list_admin_driver_licenses(
     """List all driver license applications."""
     from app.models.driving import DriverProfile
     from app.models.user import Users
-    from sqlmodel import select, func
+    from sqlmodel import select, func, or_
     
-    stmt = select(DriverProfile, Users).join(Users, DriverProfile.user_id == Users.id).where(DriverProfile.license_number != None)
+    base_filter = or_(DriverProfile.license_number != None, DriverProfile.license_picture_url != None)
+    stmt = select(DriverProfile, Users).join(Users, DriverProfile.user_id == Users.id).where(base_filter)
     
     if status and status.lower() != "all":
-        stmt = stmt.where(DriverProfile.license_status == status.lower())
+        stmt = stmt.where(func.lower(DriverProfile.license_status) == status.lower())
         
     total_res = await db.execute(select(func.count()).select_from(stmt.subquery()))
     total = total_res.scalar() or 0
@@ -1120,15 +1121,15 @@ async def list_admin_driver_licenses(
             "user_id": str(user.id),
             "name": f"{getattr(user, 'first_name', '')} {getattr(user, 'last_name', '')}".strip() or user.username,
             "email": user.email,
-            "license_number": profile.license_number,
+            "license_number": profile.license_number or "N/A",
             "license_picture_url": profile.license_picture_url,
-            "license_status": profile.license_status.upper(),
+            "license_status": (profile.license_status or "unverified").lower(),
             "submitted_at": profile.updated_at.strftime("%d/%m/%Y") if profile.updated_at else "—",
         })
         
-    pending_count = (await db.execute(select(func.count()).select_from(DriverProfile).where(DriverProfile.license_number != None).where(DriverProfile.license_status == "pending"))).scalar() or 0
-    verified_count = (await db.execute(select(func.count()).select_from(DriverProfile).where(DriverProfile.license_number != None).where(DriverProfile.license_status == "verified"))).scalar() or 0
-    rejected_count = (await db.execute(select(func.count()).select_from(DriverProfile).where(DriverProfile.license_number != None).where(DriverProfile.license_status == "rejected"))).scalar() or 0
+    pending_count = (await db.execute(select(func.count()).select_from(DriverProfile).where(base_filter).where(func.lower(DriverProfile.license_status) == "pending"))).scalar() or 0
+    verified_count = (await db.execute(select(func.count()).select_from(DriverProfile).where(base_filter).where(func.lower(DriverProfile.license_status) == "verified"))).scalar() or 0
+    rejected_count = (await db.execute(select(func.count()).select_from(DriverProfile).where(base_filter).where(func.lower(DriverProfile.license_status) == "rejected"))).scalar() or 0
     
     return {
         "items": items,
@@ -1173,7 +1174,7 @@ async def get_admin_driver_license_detail(driver_id: str, db: AsyncSession = Dep
         "car_model": profile.car_model,
         "plate_number": profile.plate_number,
         "vehicle_type": profile.vehicle_type,
-        "license_status": profile.license_status.upper(),
+        "license_status": (profile.license_status or "unverified").lower(),
         "license_rejection_reason": profile.license_rejection_reason,
         "submitted_at": profile.updated_at.isoformat() if profile.updated_at else None,
         "personal_info": {
@@ -1190,6 +1191,7 @@ async def get_admin_driver_license_detail(driver_id: str, db: AsyncSession = Dep
 async def review_admin_driver_license(driver_id: str, req: Request, db: AsyncSession = Depends(get_session)):
     """Approve or reject a driver license application."""
     from app.models.driving import DriverProfile, DriverStatus
+    from app.models.user import Users
     from sqlmodel import select
     
     try:
@@ -1201,10 +1203,13 @@ async def review_admin_driver_license(driver_id: str, req: Request, db: AsyncSes
     action = body.get("action", "").lower()
     reason = body.get("reason") or body.get("rejection_reason", "")
     
-    res = await db.execute(select(DriverProfile).where(DriverProfile.id == did))
-    profile = res.scalar_one_or_none()
-    if not profile:
+    stmt = select(DriverProfile, Users).join(Users, DriverProfile.user_id == Users.id).where(DriverProfile.id == did)
+    res = await db.execute(stmt)
+    result = res.all()
+    if not result:
         raise HTTPException(status_code=404, detail="Driver profile not found")
+        
+    profile, user = result[0]
         
     if action == "approve":
         profile.license_status = "verified"
@@ -1219,7 +1224,15 @@ async def review_admin_driver_license(driver_id: str, req: Request, db: AsyncSes
         
     db.add(profile)
     await db.commit()
-    return {"message": f"Driver license {action}d successfully", "status": profile.license_status.upper()}
+
+    try:
+        from app.services.email_notification_service import NotificationService
+        notif = NotificationService()
+        notif.send_driver_license_status_mail(user, profile.license_status, profile.license_rejection_reason)
+    except Exception as ex:
+        print(f"Failed to send driver license status email: {ex}")
+
+    return {"message": f"Driver license {action}d successfully", "status": profile.license_status.lower()}
 
 
 @router.get("/admin-drivers/{driver_id}")
