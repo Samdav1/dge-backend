@@ -479,7 +479,8 @@ async def create_admin_notification(
     db: AsyncSession = Depends(get_session)
 ):
     from app.models.notifications import AdminNotification, Notification, NotificationType
-    from app.models.user import Users, UserStatus, KYCStatus
+    from app.models.user import Users, UserStatus
+    from app.models.kyc import KYC, KYCStatus
     from app.services.email_notification_service import NotificationService
     from app.config import settings
     from sqlmodel import select
@@ -502,19 +503,17 @@ async def create_admin_notification(
     recip_key = str(recipients).lower()
     if "active" in recip_key:
         stmt = stmt.where(Users.status == UserStatus.active)
-    elif "verified" in recip_key:
-        stmt = stmt.where(
-            (Users.kyc_status == KYCStatus.approved) | (Users.email_verified == True)
-        )
-    elif "pending" in recip_key:
-        stmt = stmt.where(
-            (Users.kyc_status == KYCStatus.pending) | (Users.email_verified == False)
-        )
     elif "inactive" in recip_key:
         stmt = stmt.where(Users.status != UserStatus.active)
 
     res = await db.execute(stmt)
     target_users = res.scalars().all()
+
+    # Filter verified/pending in python if selected
+    if "verified" in recip_key:
+        target_users = [u for u in target_users if getattr(u, "email_verified", False)]
+    elif "pending" in recip_key:
+        target_users = [u for u in target_users if not getattr(u, "email_verified", False)]
 
     delivery_key = str(delivery_type).lower()
     send_email = "email" in delivery_key or "both" in delivery_key
