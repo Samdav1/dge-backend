@@ -478,7 +478,11 @@ async def create_admin_notification(
     request: Request,
     db: AsyncSession = Depends(get_session)
 ):
-    from app.models.notifications import AdminNotification
+    from app.models.notifications import AdminNotification, Notification, NotificationType
+    from app.models.user import Users, UserStatus, KYCStatus
+    from app.services.email_notification_service import NotificationService
+    from sqlmodel import select
+
     try:
         body = await request.json()
     except Exception:
@@ -491,6 +495,54 @@ async def create_admin_notification(
 
     if not title or not message or not recipients or not delivery_type:
         raise HTTPException(status_code=400, detail="Missing required fields")
+
+    # Select targeted users
+    stmt = select(Users)
+    recip_key = str(recipients).lower()
+    if "active" in recip_key:
+        stmt = stmt.where(Users.status == UserStatus.active)
+    elif "verified" in recip_key:
+        stmt = stmt.where(
+            (Users.kyc_status == KYCStatus.approved) | (Users.email_verified == True)
+        )
+    elif "pending" in recip_key:
+        stmt = stmt.where(
+            (Users.kyc_status == KYCStatus.pending) | (Users.email_verified == False)
+        )
+    elif "inactive" in recip_key:
+        stmt = stmt.where(Users.status != UserStatus.active)
+
+    res = await db.execute(stmt)
+    target_users = res.scalars().all()
+
+    delivery_key = str(delivery_type).lower()
+    send_email = "email" in delivery_key or "both" in delivery_key
+    send_push = "push" in delivery_key or "in-app" in delivery_key or "both" in delivery_key
+
+    notifier = NotificationService()
+
+    for u in target_users:
+        if send_push:
+            n = Notification(
+                user_id=u.id,
+                title=title,
+                content=message,
+                type=NotificationType.SYSTEM,
+                is_read=False
+            )
+            db.add(n)
+
+        if send_email and getattr(u, 'email', None):
+            try:
+                context = {
+                    'name': getattr(u, 'username', 'Valued User'),
+                    'title': title,
+                    'message': message,
+                    'cta_link': f"{settings.frontend_url}/dashboard"
+                }
+                notifier._render_and_dispatch('ticket_notification.html', [str(u.email)], f"[DGE Announcement] {title}", context)
+            except Exception as mail_err:
+                print(f"Failed to send admin email to {u.email}: {mail_err}")
 
     notif = AdminNotification(
         title=title,
