@@ -1225,10 +1225,29 @@ async def review_admin_driver_license(driver_id: str, req: Request, db: AsyncSes
     db.add(profile)
     await db.commit()
 
+    # Create In-App Notification
+    try:
+        from datetime import datetime, timezone
+        from app.models.notifications import Notification, NotificationType
+        notif_msg = "Your Driver License verification application has been approved! 🎉" if action == "approve" else f"Your Driver License verification application was rejected. Reason: {reason or 'Not specified'}"
+        in_app_notif = Notification(
+            user_id=profile.user_id,
+            type=NotificationType.general,
+            message=notif_msg,
+            metadataInfo={"status": profile.license_status, "type": "driver_license"},
+            is_read=False,
+            created_at=datetime.now(timezone.utc)
+        )
+        db.add(in_app_notif)
+        await db.commit()
+    except Exception as ex:
+        print(f"Failed to create in-app notification for driver license: {ex}")
+
+    # Send Email Notification
     try:
         from app.services.email_notification_service import NotificationService
-        notif = NotificationService()
-        notif.send_driver_license_status_mail(user, profile.license_status, profile.license_rejection_reason)
+        notif_svc = NotificationService()
+        notif_svc.send_driver_license_status_mail(user, profile.license_status, profile.license_rejection_reason)
     except Exception as ex:
         print(f"Failed to send driver license status email: {ex}")
 
@@ -1484,14 +1503,30 @@ async def review_admin_kyc(user_id: str, req: Request, db: AsyncSession = Depend
         raise HTTPException(status_code=400, detail="Invalid action. Use 'approve' or 'reject'")
         
     kyc.reviewed_at = datetime.now(timezone.utc)
-    await db.commit()
+    # Create In-App Notification
+    try:
+        from app.models.notifications import Notification, NotificationType
+        notif_msg = "Your KYC verification has been approved! 🎉" if action == "approve" else f"Your KYC verification was rejected. Reason: {reason or 'Not specified'}"
+        in_app_notif = Notification(
+            user_id=uid,
+            type=NotificationType.general,
+            message=notif_msg,
+            metadataInfo={"status": kyc.status.value if hasattr(kyc.status, "value") else str(kyc.status), "type": "kyc"},
+            is_read=False,
+            created_at=datetime.now(timezone.utc)
+        )
+        db.add(in_app_notif)
+        await db.commit()
+    except Exception as ex:
+        print(f"Failed to create in-app notification for KYC: {ex}")
 
+    # Send Email Notification
     try:
         from app.repositories.user_repo import get_user_by_id
         user_obj = await get_user_by_id(uid, db)
         if user_obj:
             from app.services.email_notification_service import NotificationService
-            NotificationService().send_kyc_status_mail(user_obj, kyc.status.value, reason if action == "reject" else None)
+            NotificationService().send_kyc_status_mail(user_obj, kyc.status.value if hasattr(kyc.status, "value") else str(kyc.status), reason if action == "reject" else None)
     except Exception as ex:
         print(f"Failed to send KYC status email: {ex}")
 

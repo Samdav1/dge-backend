@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+
+{% block content %}
+{% if status == 'verified' or status == 'approved' %}
+<h2>Driver License Approved ✅</h2>
+
+<p>Hi {{ name }},</p>
+
+<p>Great news! Your driver license verification for your DGE World account has been <strong>approved</strong>.</p>
+
+<p>You can now accept driving and delivery tasks across the platform.</p>
+
+<div class="cta-container">
+    <a href="{{ cta_link }}" class="cta-button">Go to Dashboard</a>
+</div>
+{% else %}
+<h2>Driver License Verification Update ⚠️</h2>
+
+<p>Hi {{ name }},</p>
+
+<p>Your recent driver license submission could not be approved at this time.</p>
+
+{% if rejection_reason %}
+<div style="background-color: #fef2f2; border: 1px solid #fecaca; border-radius: 8px; padding: 16px; margin-bottom: 24px;">
+    <strong style="color: #991b1b;">Reason:</strong>
+    <p style="color: #7f1d1d; margin: 4px 0 0;">{{ rejection_reason }}</p>
+</div>
+{% endif %}
+
+<p>Please review your license details and upload a valid driver license document from your profile page.</p>
+
+<div class="cta-container">
+    <a href="{{ cta_link }}" class="cta-button">Resubmit Driver License</a>
+</div>
+{% endif %}
+{% endblock %}

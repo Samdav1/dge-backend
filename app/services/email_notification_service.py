@@ -526,13 +526,18 @@ class NotificationService:
         else:
             subject = "KYC Verification Status Update - DGE World"
 
+        email = getattr(user, 'email', None)
+        if not email:
+            print("Cannot send KYC status email: missing user email")
+            return
+
         context = {
-            'name': user.username,
+            'name': getattr(user, 'username', 'Valued User'),
             'status': status,
             'rejection_reason': rejection_reason,
             'cta_link': f"{settings.frontend_url}/dashboard/profile"
         }
-        self._render_and_dispatch('kyc_status.html', [user.email], subject, context)
+        self._render_and_dispatch('kyc_status.html', [str(email)], subject, context)
 
     def send_driver_license_status_mail(self, user: Users, status: str, rejection_reason: str = None):
         if status in ["verified", "approved"]:
@@ -540,13 +545,18 @@ class NotificationService:
         else:
             subject = "Driver License Verification Update - DGE World"
 
+        email = getattr(user, 'email', None)
+        if not email:
+            print("Cannot send Driver License status email: missing user email")
+            return
+
         context = {
-            'name': user.username,
+            'name': getattr(user, 'username', 'Valued User'),
             'status': status,
             'rejection_reason': rejection_reason,
             'cta_link': f"{settings.frontend_url}/dashboard/profile?tab=driver"
         }
-        self._render_and_dispatch('kyc_status.html', [user.email], subject, context)
+        self._render_and_dispatch('driver_license_status.html', [str(email)], subject, context)
 
     def send_service_status_mail(self, user: Users, service, status: str):
         if status in ["approved", "ACTIVE"]:
