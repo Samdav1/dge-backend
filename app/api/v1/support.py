@@ -18,18 +18,25 @@ router = APIRouter(prefix="/support-tickets", )
 @router.post("/", response_model=SupportTicketRead, status_code=status.HTTP_201_CREATED)
 async def create_ticket(payload: SupportTicketCreate, user: UserRead = Depends(get_current_user), db: AsyncSession = Depends(get_session)):
     service = SupportTicketService(db)
-    return await service.create_ticket(payload.dict())
+    ticket_dict = payload.dict()
+    ticket_dict["user_id"] = user.id
+    return await service.create_ticket(ticket_dict, user=user)
 
 @router.get("/", response_model=list[SupportTicketRead])
 async def list_tickets(user: UserRead = Depends(get_current_user), db: AsyncSession = Depends(get_session)):
     service = SupportTicketService(db)
-    return await service.list_tickets()
+    is_admin = getattr(user, "is_admin", False)
+    return await service.list_tickets(user_id=user.id, is_admin=is_admin)
 
 @router.get("/{ticket_id}", response_model=SupportTicketRead)
-async def get_ticket(ticket_id: UUID, user: UserRead = Depends(get_current_user),  db: AsyncSession = Depends(get_session)):
+async def get_ticket(ticket_id: UUID, user: UserRead = Depends(get_current_user), db: AsyncSession = Depends(get_session)):
     service = SupportTicketService(db)
     try:
-        return await service.get_ticket(ticket_id)
+        ticket = await service.get_ticket(ticket_id)
+        is_admin = getattr(user, "is_admin", False)
+        if not is_admin and ticket.user_id != user.id:
+            raise HTTPException(status_code=403, detail="Access denied to this ticket")
+        return ticket
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
 
@@ -37,9 +44,13 @@ async def get_ticket(ticket_id: UUID, user: UserRead = Depends(get_current_user)
 async def update_ticket(ticket_id: UUID, payload: SupportTicketUpdate, user: UserRead = Depends(get_current_user), db: AsyncSession = Depends(get_session)):
     service = SupportTicketService(db)
     try:
+        existing = await service.get_ticket(ticket_id)
+        is_admin = getattr(user, "is_admin", False)
+        if not is_admin and existing.user_id != user.id:
+            raise HTTPException(status_code=403, detail="Access denied to this ticket")
+
         update_data = payload.dict(exclude_unset=True)
-        if user.is_admin:
-            # If admin is updating, we can also set assigned_admin_id
+        if is_admin:
             if "assigned_to" not in update_data:
                 update_data["assigned_admin_id"] = user.id
         
@@ -51,6 +62,10 @@ async def update_ticket(ticket_id: UUID, payload: SupportTicketUpdate, user: Use
 async def delete_ticket(ticket_id: UUID, user: UserRead = Depends(get_current_user), db: AsyncSession = Depends(get_session)):
     service = SupportTicketService(db)
     try:
+        existing = await service.get_ticket(ticket_id)
+        is_admin = getattr(user, "is_admin", False)
+        if not is_admin and existing.user_id != user.id:
+            raise HTTPException(status_code=403, detail="Access denied to this ticket")
         await service.delete_ticket(ticket_id)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
@@ -63,25 +78,26 @@ async def create_reply(ticket_id: UUID, payload: SupportTicketReplyCreate, user:
     if str(payload.ticket_id) != str(ticket_id):
         raise HTTPException(status_code=400, detail="Ticket ID mismatch")
     
-    print(f"DEBUG SUPPORT: Creating reply. User ID: {user.id}, is_admin: {user.is_admin}")
-    
     reply_data = payload.dict()
-    if user.is_admin:
+    is_admin = getattr(user, "is_admin", False)
+    if is_admin:
         reply_data["author_admin_id"] = user.id
         reply_data["author_user_id"] = None
-        print(f"DEBUG SUPPORT: Admin reply detected. author_admin_id set to {user.id}")
     else:
         reply_data["author_user_id"] = user.id
         reply_data["author_admin_id"] = None
-        print(f"DEBUG SUPPORT: Regular user reply detected. author_user_id set to {user.id}")
         
     try:
-        return await service.create_reply(reply_data)
+        return await service.create_reply(reply_data, current_user=user)
     except Exception as e:
         print(f"DEBUG SUPPORT: Error creating reply: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
 
 @router.get("/{ticket_id}/replies", response_model=list[SupportTicketReplyRead])
-async def list_replies(ticket_id: UUID, user_id: UserRead = Depends(get_current_user), db: AsyncSession = Depends(get_session)):
+async def list_replies(ticket_id: UUID, user: UserRead = Depends(get_current_user), db: AsyncSession = Depends(get_session)):
     service = SupportTicketService(db)
+    existing = await service.get_ticket(ticket_id)
+    is_admin = getattr(user, "is_admin", False)
+    if not is_admin and existing.user_id != user.id:
+        raise HTTPException(status_code=403, detail="Access denied to this ticket")
     return await service.list_replies(ticket_id)

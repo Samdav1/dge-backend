@@ -21,18 +21,28 @@ class SupportTicketRepository:
         result = await self.db.execute(select(SupportTicket).where(SupportTicket.id == ticket_id))
         return result.scalars().first()
 
-    async def list_tickets(self) -> List[dict]:
+    async def list_tickets(self, user_id: Optional[UUID] = None, is_admin: bool = False) -> List[dict]:
         from app.models.user import Users
         from app.models.admin import SuperAdmin
-        result = await self.db.execute(
-            select(SupportTicket, Users.username, SuperAdmin.name)
+        from app.models.profile import Profile
+
+        query = (
+            select(SupportTicket, Users.username, Users.email, Profile.first_name, Profile.last_name, SuperAdmin.name)
             .outerjoin(Users, SupportTicket.user_id == Users.id)
+            .outerjoin(Profile, Users.id == Profile.user_id)
             .outerjoin(SuperAdmin, SupportTicket.assigned_admin_id == SuperAdmin.id)
         )
+        if not is_admin and user_id:
+            query = query.where(SupportTicket.user_id == user_id)
+
+        query = query.order_by(SupportTicket.created_at.desc())
+        result = await self.db.execute(query)
         tickets = []
-        for ticket, username, admin_name in result.all():
+        for ticket, username, email, first_name, last_name, admin_name in result.all():
             ticket_dict = ticket.model_dump()
-            ticket_dict["user_name"] = username or admin_name or "Unknown"
+            full_name = f"{first_name} {last_name}".strip() if (first_name or last_name) else None
+            ticket_dict["user_name"] = full_name or username or email or admin_name or "User"
+            ticket_dict["user_email"] = email
             tickets.append(ticket_dict)
         return tickets
 
@@ -58,15 +68,20 @@ class SupportTicketRepository:
     async def list_replies(self, ticket_id: UUID) -> List[dict]:
         from app.models.user import Users
         from app.models.admin import SuperAdmin
+        from app.models.profile import Profile
         result = await self.db.execute(
-            select(SupportTicketReply, Users.username, SuperAdmin.name)
+            select(SupportTicketReply, Users.username, Users.email, Profile.first_name, Profile.last_name, SuperAdmin.name)
             .outerjoin(Users, SupportTicketReply.author_user_id == Users.id)
+            .outerjoin(Profile, Users.id == Profile.user_id)
             .outerjoin(SuperAdmin, SupportTicketReply.author_admin_id == SuperAdmin.id)
             .where(SupportTicketReply.ticket_id == ticket_id)
+            .order_by(SupportTicketReply.created_at.asc())
         )
         replies = []
-        for reply, username, admin_name in result.all():
+        for reply, username, email, first_name, last_name, admin_name in result.all():
             reply_dict = reply.model_dump()
-            reply_dict["author_name"] = username or admin_name or "Support Team"
+            full_name = f"{first_name} {last_name}".strip() if (first_name or last_name) else None
+            reply_dict["author_name"] = full_name or username or admin_name or email or "Support Team"
             replies.append(reply_dict)
         return replies
+

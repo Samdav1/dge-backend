@@ -1651,7 +1651,7 @@ async def delete_negotiation(
 
 @router.get("/admin-escrows")
 async def list_admin_escrows(
-    status: Optional[str] = "held",
+    status: Optional[str] = None,
     page: int = 1,
     limit: int = 50,
     db: AsyncSession = Depends(get_session),
@@ -1660,6 +1660,7 @@ async def list_admin_escrows(
     from app.models.escrow import Escrow, EscrowStatus
     from app.models.price_negotiation import PriceNegotiation
     from app.models.services import Service
+    from app.models.posted_job import PostedJob
     from app.models.user import Users
     from app.models.wallet import Wallet
     from sqlmodel import select, func
@@ -1670,13 +1671,14 @@ async def list_admin_escrows(
     PayeeWallet = aliased(Wallet)
     PayeeUser = aliased(Users)
     
-    stmt = select(Escrow, PriceNegotiation, Service, PayerUser, PayeeUser)\
-        .join(PriceNegotiation, Escrow.payment_negotiation_id == PriceNegotiation.id)\
-        .join(Service, PriceNegotiation.service_id == Service.id)\
-        .join(PayerWallet, Escrow.payer_wallet_id == PayerWallet.id)\
-        .join(PayerUser, PayerWallet.user_id == PayerUser.id)\
-        .join(PayeeWallet, Escrow.payee_wallet_id == PayeeWallet.id)\
-        .join(PayeeUser, PayeeWallet.user_id == PayeeUser.id)
+    stmt = select(Escrow, PriceNegotiation, Service, PostedJob, PayerUser, PayeeUser)\
+        .outerjoin(PriceNegotiation, Escrow.payment_negotiation_id == PriceNegotiation.id)\
+        .outerjoin(Service, PriceNegotiation.service_id == Service.id)\
+        .outerjoin(PostedJob, PriceNegotiation.posted_job_id == PostedJob.id)\
+        .outerjoin(PayerWallet, Escrow.payer_wallet_id == PayerWallet.id)\
+        .outerjoin(PayerUser, PayerWallet.user_id == PayerUser.id)\
+        .outerjoin(PayeeWallet, Escrow.payee_wallet_id == PayeeWallet.id)\
+        .outerjoin(PayeeUser, PayeeWallet.user_id == PayeeUser.id)
         
     if status and status.lower() != "all":
         try:
@@ -1692,21 +1694,23 @@ async def list_admin_escrows(
     rows = res.all()
     
     items = []
-    for esc, neg, svc, payer, payee in rows:
+    for esc, neg, svc, p_job, payer, payee in rows:
+        service_name = svc.name if svc else (p_job.title if p_job else "Escrow Service")
         items.append({
             "id": str(esc.id),
-            "service_name": svc.name,
-            "payer_name": payer.username,
-            "payee_name": payee.username,
-            "amount": f"\u20a6{esc.amount_cents / 100:,.2f}",
-            "status": esc.status.value.upper(),
-            "created_at": esc.created_at.strftime("%d/%m/%Y") if esc.created_at else "\u2014",
+            "service_name": service_name,
+            "payer_name": payer.username if payer else "Payer",
+            "payee_name": payee.username if payee else "Payee",
+            "amount": f"₦{esc.amount_cents / 100:,.2f}",
+            "status": esc.status.value.upper() if hasattr(esc.status, "value") else str(esc.status).upper(),
+            "created_at": esc.created_at.strftime("%d/%m/%Y") if esc.created_at else "—",
         })
         
     # Stats
     held_count = (await db.execute(select(func.count()).select_from(Escrow).where(Escrow.status == EscrowStatus.held))).scalar() or 0
     released_count = (await db.execute(select(func.count()).select_from(Escrow).where(Escrow.status == EscrowStatus.released))).scalar() or 0
     refunded_count = (await db.execute(select(func.count()).select_from(Escrow).where(Escrow.status == EscrowStatus.refunded))).scalar() or 0
+    disputed_count = (await db.execute(select(func.count()).select_from(Escrow).where(Escrow.status == EscrowStatus.disputed))).scalar() or 0
     
     return {
         "items": items,
@@ -1714,7 +1718,8 @@ async def list_admin_escrows(
         "summary": {
             "held": held_count,
             "released": released_count,
-            "refunded": refunded_count
+            "refunded": refunded_count,
+            "disputed": disputed_count
         }
     }
 
@@ -1727,6 +1732,7 @@ async def get_admin_escrow_detail(
     from app.models.escrow import Escrow
     from app.models.price_negotiation import PriceNegotiation
     from app.models.services import Service, ServiceCategory, ServiceCategoryLink
+    from app.models.posted_job import PostedJob
     from app.models.user import Users
     from app.models.wallet import Wallet
     from sqlmodel import select
@@ -1742,15 +1748,16 @@ async def get_admin_escrow_detail(
     PayeeWallet = aliased(Wallet)
     PayeeUser = aliased(Users)
     
-    stmt = select(Escrow, PriceNegotiation, Service, PayerUser, PayeeUser, ServiceCategory)\
-        .join(PriceNegotiation, Escrow.payment_negotiation_id == PriceNegotiation.id)\
-        .join(Service, PriceNegotiation.service_id == Service.id)\
+    stmt = select(Escrow, PriceNegotiation, Service, PostedJob, PayerUser, PayeeUser, ServiceCategory)\
+        .outerjoin(PriceNegotiation, Escrow.payment_negotiation_id == PriceNegotiation.id)\
+        .outerjoin(Service, PriceNegotiation.service_id == Service.id)\
+        .outerjoin(PostedJob, PriceNegotiation.posted_job_id == PostedJob.id)\
         .outerjoin(ServiceCategoryLink, Service.id == ServiceCategoryLink.service_id)\
         .outerjoin(ServiceCategory, ServiceCategoryLink.category_id == ServiceCategory.id)\
-        .join(PayerWallet, Escrow.payer_wallet_id == PayerWallet.id)\
-        .join(PayerUser, PayerWallet.user_id == PayerUser.id)\
-        .join(PayeeWallet, Escrow.payee_wallet_id == PayeeWallet.id)\
-        .join(PayeeUser, PayeeWallet.user_id == PayeeUser.id)\
+        .outerjoin(PayerWallet, Escrow.payer_wallet_id == PayerWallet.id)\
+        .outerjoin(PayerUser, PayerWallet.user_id == PayerUser.id)\
+        .outerjoin(PayeeWallet, Escrow.payee_wallet_id == PayeeWallet.id)\
+        .outerjoin(PayeeUser, PayeeWallet.user_id == PayeeUser.id)\
         .where(Escrow.id == eid)
         
     res = await db.execute(stmt)
@@ -1759,34 +1766,37 @@ async def get_admin_escrow_detail(
     if not result:
         raise HTTPException(status_code=404, detail="Escrow not found")
         
-    esc, neg, svc, payer, payee, cat = result
+    esc, neg, svc, p_job, payer, payee, cat = result
+    service_name = svc.name if svc else (p_job.title if p_job else "Escrow Service")
+    service_desc = svc.description if svc else (p_job.description if p_job else "Direct escrow payment")
+    service_price = f"₦{svc.price:,.2f}" if svc else f"₦{esc.amount_cents / 100:,.2f}"
     
     return {
         "id": str(esc.id),
-        "amount": f"\u20a6{esc.amount_cents / 100:,.2f}",
-        "status": esc.status.value.upper(),
-        "created_at": esc.created_at.strftime("%d/%m/%Y %H:%M:%S") if esc.created_at else "\u2014",
-        "updated_at": esc.updated_at.strftime("%d/%m/%Y %H:%M:%S") if esc.updated_at else "\u2014",
+        "amount": f"₦{esc.amount_cents / 100:,.2f}",
+        "status": esc.status.value.upper() if hasattr(esc.status, "value") else str(esc.status).upper(),
+        "created_at": esc.created_at.strftime("%d/%m/%Y %H:%M:%S") if esc.created_at else "—",
+        "updated_at": esc.updated_at.strftime("%d/%m/%Y %H:%M:%S") if esc.updated_at else "—",
         "service": {
-            "name": svc.name,
+            "name": service_name,
             "category": cat.name if cat else "General",
-            "description": svc.description,
-            "price": f"\u20a6{svc.price:,.2f}"
+            "description": service_desc,
+            "price": service_price
         },
         "negotiation": {
-            "proposed_price": f"\u20a6{neg.proposed_price_cents / 100:,.2f}",
-            "original_price": f"\u20a6{svc.price:,.2f}",
-            "status": neg.status.value
+            "proposed_price": f"₦{neg.proposed_price_cents / 100:,.2f}" if neg else f"₦{esc.amount_cents / 100:,.2f}",
+            "original_price": service_price,
+            "status": neg.status.value if (neg and hasattr(neg.status, "value")) else "completed"
         },
         "payer": {
-            "username": payer.username,
-            "email": payer.email,
-            "full_name": payer.username
+            "username": payer.username if payer else "Payer",
+            "email": payer.email if payer else "N/A",
+            "full_name": payer.username if payer else "Payer"
         },
         "payee": {
-            "username": payee.username,
-            "email": payee.email,
-            "full_name": payee.username
+            "username": payee.username if payee else "Payee",
+            "email": payee.email if payee else "N/A",
+            "full_name": payee.username if payee else "Payee"
         }
     }
 
@@ -1796,9 +1806,8 @@ async def update_admin_escrow_status(
     payload: dict,
     db: AsyncSession = Depends(get_session),
 ):
-    """Manually update escrow status."""
+    """Manually update escrow status with wallet ledger balance adjustments."""
     from app.models.escrow import Escrow, EscrowStatus
-    from datetime import datetime
     
     try:
         eid = uuid.UUID(escrow_id)
@@ -1806,21 +1815,36 @@ async def update_admin_escrow_status(
         raise HTTPException(status_code=400, detail="Invalid escrow_id")
         
     new_status = payload.get("status")
-    if not new_status or new_status.lower() not in ["held", "released", "refunded"]:
+    if not new_status or new_status.lower() not in ["held", "released", "refunded", "disputed"]:
         raise HTTPException(status_code=400, detail="Invalid status")
         
     esc = await db.get(Escrow, eid)
     if not esc:
         raise HTTPException(status_code=404, detail="Escrow not found")
         
-    esc.status = EscrowStatus(new_status.lower())
-    if esc.status == EscrowStatus.released:
-        esc.released_at = datetime.utcnow()
-    elif esc.status == EscrowStatus.refunded:
-        esc.refunded_at = datetime.utcnow()
+    target_status = EscrowStatus(new_status.lower())
+    if esc.status != target_status:
+        from app.services.escrow_service import EscrowService
+        esc_service = EscrowService(db)
         
-    await db.commit()
+        if esc.status == EscrowStatus.held and target_status == EscrowStatus.released:
+            # Retrieve payer user context
+            from app.models.wallet import Wallet
+            payer_w = await db.get(Wallet, esc.payer_wallet_id)
+            admin_user = type("AdminUser", (), {"id": payer_w.user_id if payer_w else esc.payer_wallet_id})()
+            await esc_service.release_escrow(user=admin_user, escrow_id=esc.id)
+        elif esc.status == EscrowStatus.held and target_status == EscrowStatus.refunded:
+            from app.models.wallet import Wallet
+            payer_w = await db.get(Wallet, esc.payer_wallet_id)
+            admin_user = type("AdminUser", (), {"id": payer_w.user_id if payer_w else esc.payer_wallet_id})()
+            await esc_service.refund_escrow(user=admin_user, escrow_id=esc.id)
+        else:
+            esc.status = target_status
+            db.add(esc)
+            await db.commit()
+        
     return {"message": f"Escrow status updated to {new_status.upper()}"}
+
 
 @router.get("/admin-transactions")
 async def list_admin_transactions(
@@ -1919,30 +1943,25 @@ async def get_admin_transaction_detail(
 async def get_admin_tickets(
     db: AsyncSession = Depends(get_session),
 ):
-    """List all support tickets for admin view."""
-    from app.models.support_ticket import SupportTicket
-    from sqlmodel import select
-    
-    res = await db.execute(select(SupportTicket).order_by(SupportTicket.created_at.desc()))
-    tickets = res.scalars().all()
-    return tickets
+    """List all support tickets for admin view with user details."""
+    from app.services.support_service import SupportTicketService
+    service = SupportTicketService(db)
+    return await service.list_tickets(is_admin=True)
 
 @router.get("/admin-tickets/{ticket_id}/replies")
 async def get_admin_ticket_replies(
     ticket_id: str,
     db: AsyncSession = Depends(get_session),
 ):
-    """List replies for a specific ticket."""
-    from app.models.support_ticket import SupportTicketReply
-    from sqlmodel import select
-    
+    """List replies for a specific ticket with author names."""
+    from app.services.support_service import SupportTicketService
     try:
         tid = uuid.UUID(ticket_id)
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid ticket_id")
         
-    res = await db.execute(select(SupportTicketReply).where(SupportTicketReply.ticket_id == tid).order_by(SupportTicketReply.created_at.asc()))
-    return res.scalars().all()
+    service = SupportTicketService(db)
+    return await service.list_replies(tid)
 
 @router.get("/admin-tickets/{ticket_id}")
 async def get_admin_ticket(
@@ -1951,17 +1970,33 @@ async def get_admin_ticket(
 ):
     """Get full details of a specific ticket."""
     from app.models.support_ticket import SupportTicket
+    from app.models.user import Users
+    from app.models.profile import Profile
+    from sqlmodel import select
     
     try:
         tid = uuid.UUID(ticket_id)
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid ticket_id")
         
-    ticket = await db.get(SupportTicket, tid)
-    if not ticket:
+    query = (
+        select(SupportTicket, Users.username, Users.email, Profile.first_name, Profile.last_name)
+        .outerjoin(Users, SupportTicket.user_id == Users.id)
+        .outerjoin(Profile, Users.id == Profile.user_id)
+        .where(SupportTicket.id == tid)
+    )
+    res = await db.execute(query)
+    row = res.first()
+    if not row:
         raise HTTPException(status_code=404, detail="Ticket not found")
         
-    return ticket
+    ticket, username, email, first_name, last_name = row
+    t_dict = ticket.model_dump()
+    full_name = f"{first_name} {last_name}".strip() if (first_name or last_name) else None
+    t_dict["user_name"] = full_name or username or email or "User"
+    t_dict["user_email"] = email
+    return t_dict
+
 
 
 # ════════════════════════════════════════════════════════════════════════════

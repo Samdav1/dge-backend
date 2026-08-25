@@ -536,5 +536,65 @@ class NotificationService:
         }
         self._render_and_dispatch('job_status.html', [str(email)], subject, context)
 
+    # ─── Support Tickets ───────────────────────────────────────────────────
+
+    def send_ticket_created_mail(self, user, ticket):
+        username = getattr(user, 'username', 'Valued User')
+        user_email = getattr(user, 'email', '')
+        short_id = str(ticket.id)[:8].upper()
+        subject = f"Support Ticket Created: [{short_id}] {ticket.subject}"
+
+        # To User
+        if user_email:
+            user_context = {
+                'name': username,
+                'event_title': "Support Ticket Received",
+                'header_message': f"Your support ticket #{short_id} has been created and received by our support team.",
+                'message': ticket.description,
+                'subject': ticket.subject,
+                'ticket_id': short_id,
+                'status_display': (ticket.status.value if hasattr(ticket.status, "value") else str(ticket.status)).upper(),
+                'author_name': username,
+                'cta_link': f"{settings.frontend_url}/dashboard/support/{ticket.id}"
+            }
+            self._render_and_dispatch('ticket_notification.html', [str(user_email)], subject, user_context)
+
+        # Alert Admin Support
+        admin_email = os.getenv("SUPPORT_ADMIN_EMAIL") or os.getenv("EMAIL_SENDER_ADDRESS")
+        if admin_email:
+            admin_context = {
+                'name': "Support Admin",
+                'event_title': "New Support Ticket Opened",
+                'header_message': f"A new support ticket #{short_id} was submitted by {username} ({user_email}).",
+                'message': ticket.description,
+                'subject': ticket.subject,
+                'ticket_id': short_id,
+                'status_display': (ticket.status.value if hasattr(ticket.status, "value") else str(ticket.status)).upper(),
+                'author_name': username,
+                'cta_link': f"{settings.frontend_url}/admin/support"
+            }
+            self._render_and_dispatch('ticket_notification.html', [str(admin_email)], f"New Ticket Alert: [{short_id}] {ticket.subject}", admin_context)
+
+    def send_ticket_reply_mail(self, recipient_email: str, recipient_name: str, ticket, reply_message: str, author_name: str, is_admin_reply: bool):
+        if not recipient_email:
+            return
+        short_id = str(ticket.id)[:8].upper()
+        subject = f"New Reply on Ticket: [{short_id}] {ticket.subject}"
+        cta = f"{settings.frontend_url}/admin/support" if not is_admin_reply else f"{settings.frontend_url}/dashboard/support/{ticket.id}"
+
+        context = {
+            'name': recipient_name or "Valued User",
+            'event_title': "New Support Reply",
+            'header_message': f"{author_name} posted a reply on support ticket #{short_id}.",
+            'message': reply_message,
+            'subject': ticket.subject,
+            'ticket_id': short_id,
+            'status_display': (ticket.status.value if hasattr(ticket.status, "value") else str(ticket.status)).upper(),
+            'author_name': author_name,
+            'cta_link': cta
+        }
+        self._render_and_dispatch('ticket_notification.html', [str(recipient_email)], subject, context)
+
+
 
 

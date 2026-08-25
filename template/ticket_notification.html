@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h2>{{ event_title }} 🎫</h2>
+
+<p>Hi {{ name }},</p>
+
+<p>{{ header_message }}</p>
+
+<div style="background-color: #f8fafc; border-left: 4px solid #f59e0b; padding: 12px 16px; margin: 16px 0; border-radius: 4px;">
+    <p style="margin: 0; font-size: 14px; color: #334155; white-space: pre-wrap;">{{ message }}</p>
+</div>
+
+<table class="details-table">
+    <tr>
+        <th>Ticket Subject</th>
+        <td>{{ subject }}</td>
+    </tr>
+    <tr>
+        <th>Ticket ID</th>
+        <td>{{ ticket_id }}</td>
+    </tr>
+    {% if author_name %}
+    <tr>
+        <th>Updated By</th>
+        <td>{{ author_name }}</td>
+    </tr>
+    {% endif %}
+    {% if status_display %}
+    <tr>
+        <th>Status</th>
+        <td>{{ status_display }}</td>
+    </tr>
+    {% endif %}
+</table>
+
+<div class="cta-container">
+    <a href="{{ cta_link }}" class="cta-button">View Support Ticket</a>
+</div>
+{% endblock %}
