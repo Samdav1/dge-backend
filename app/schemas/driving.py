@@ -105,6 +105,12 @@ class DriverNearbyResponse(SQLModel):
     rating: float = 5.0
     driver_avatar: Optional[str] = None
     supported_vehicles: List[str] = []
+    is_online: bool = True
+    is_available: bool = True
+    is_booked: bool = False
+    status: str = "active"
+    booking_status: str = "available" # "available", "booked", "offline", "inactive"
+
 
 
 # ---------------------------------------------------------------------------

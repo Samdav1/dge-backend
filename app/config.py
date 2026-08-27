@@ -21,7 +21,7 @@ class Settings(BaseSettings):
     agora_app_id: str = os.getenv("AGORA_APP_ID", "")
     agora_app_certificate: str = os.getenv("AGORA_APP_CERTIFICATE", "")
     frontend_url: str = os.getenv("FRONTEND_URL", "https://dgespace.com")
-    api_url: str = os.getenv("API_URL", "https://dge.dgetechs.com")
+    api_url: str = os.getenv("API_URL", "https://dge-tech-production.up.railway.app")
 
     # SMTP / Resend Configuration Switcher
     email_provider: str = os.getenv("EMAIL_PROVIDER", "resend")

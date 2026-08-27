@@ -323,89 +323,153 @@ async def ping_location(
 # Nearby drivers  (Redis GEO-backed)
 # ===========================================================================
 
+def calculate_haversine(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    if lat1 == 0.0 or lon1 == 0.0 or lat2 == 0.0 or lon2 == 0.0:
+        return 999.0
+    dlat = math.radians(lat2 - lat1)
+    dlon = math.radians(lon2 - lon1)
+    a = (math.sin(dlat / 2.0) ** 2 +
+         math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) *
+         math.sin(dlon / 2.0) ** 2)
+    c = 2.0 * math.atan2(math.sqrt(a), math.sqrt(1.0 - a))
+    return round(6371.0 * c, 2)
+
+
 @router.get("/nearby", response_model=List[DriverNearbyResponse])
 async def get_drivers_nearby(
     latitude: float = Query(..., description="Rider's current latitude"),
     longitude: float = Query(..., description="Rider's current longitude"),
-    radius: float = Query(5.0, description="Search radius in kilometres"),
+    radius: float = Query(50.0, description="Search radius in kilometres"),
+    include_all: bool = Query(True, description="Whether to include all system drivers regardless of online/booked status"),
     current_user: UserRead = Depends(get_current_user),
     redis_loc: RedisLocationService = Depends(get_redis_location),
     driver_service: DriverService = Depends(get_driver_service),
     db: AsyncSession = Depends(get_session),
 ):
     """
-    Return available drivers within `radius` km, sorted nearest-first.
-    Queries Redis GEO — O(log N), no SQL scan.
+    Return drivers in system with real-time location distance, online status, and booking status.
+    If include_all=True, returns all registered system drivers regardless of online/availability state.
     """
     from app.models.user import Users
-    nearby = await redis_loc.find_nearby_available(latitude, longitude, radius_km=radius)
+    from app.models.driving import DriverProfile, Trip, TripStatus, DriverLocation, DriverVehicle
+    from app.models.profile import Profile
+    from app.models.portfolio import UserPortfolio, Review
+    from sqlmodel import select, func
+
+    # Fetch all driver profiles from DB
+    stmt_profiles = select(DriverProfile)
+    profiles_res = await db.execute(stmt_profiles)
+    all_profiles = profiles_res.scalars().all()
+
+    # Pre-fetch active trips to determine booked drivers
+    stmt_active_trips = select(Trip).where(
+        Trip.status.in_([
+            TripStatus.PENDING,
+            TripStatus.EN_ROUTE,
+            TripStatus.ARRIVED,
+            TripStatus.AWAITING_CONFIRMATION,
+            TripStatus.IN_PROGRESS,
+            TripStatus.ACTIVE
+        ])
+    )
+    trips_res = await db.execute(stmt_active_trips)
+    active_trips = trips_res.scalars().all()
+    booked_driver_ids = {t.driver_id for t in active_trips if t.driver_id}
+
     response = []
-    for d in nearby:
-        d_id = uuid.UUID(d["driver_id"])
-        profile = await driver_service.repo.get_by_id(d_id)
-        user_record = await db.get(Users, profile.user_id) if profile else None
+
+    for profile in all_profiles:
+        # 1. Location & Online status
+        loc = await redis_loc.get_location(profile.id)
+        d_lat, d_lng = 0.0, 0.0
+        is_online = False
+
+        if loc and (loc.get("lat") != 0 or loc.get("lng") != 0):
+            d_lat = float(loc["lat"])
+            d_lng = float(loc["lng"])
+            is_online = True
+        else:
+            # Check DB location fallback
+            loc_db = await db.get(DriverLocation, profile.id)
+            if loc_db:
+                d_lat = loc_db.latitude
+                d_lng = loc_db.longitude
+                is_online = loc_db.is_available or False
+
+        # Calculate Haversine distance
+        dist_km = calculate_haversine(latitude, longitude, d_lat, d_lng)
+
+        # 2. Booking & Availability status
+        is_booked = profile.id in booked_driver_ids
+        is_verified = (profile.license_status == "verified" or (hasattr(profile.status, "value") and profile.status.value == "active") or profile.status == "active")
+        is_available = is_online and (not is_booked) and is_verified
+
+        if is_booked:
+            booking_status = "booked"
+        elif is_available:
+            booking_status = "available"
+        elif not is_online:
+            booking_status = "offline"
+        else:
+            booking_status = "inactive"
+
+        # Filter out if include_all is False and driver is not available/nearby
+        if not include_all:
+            if not is_available or dist_km > radius:
+                continue
+
+        # 3. User & Personal Profile
+        user_record = await db.get(Users, profile.user_id)
         driver_name = user_record.username if user_record else "Driver"
-        car_name = f"{profile.car_name} {profile.car_model}" if profile else ""
-        # Get driver average rating from reviews
-        rating = 5.0
-        if profile:
-            from app.models.portfolio import UserPortfolio, Review
-            from sqlmodel import select, func
-            portfolio_res = await db.execute(
-                select(UserPortfolio).where(UserPortfolio.user_id == profile.user_id)
-            )
-            portfolio = portfolio_res.scalars().first()
-            if portfolio:
-                avg_rating_res = await db.execute(
-                    select(func.avg(Review.rating)).where(Review.portfolio_id == portfolio.id)
-                )
-                avg_val = avg_rating_res.scalar()
-                if avg_val is not None:
-                    rating = float(avg_val)
+        car_name = f"{profile.car_name} {profile.car_model}"
 
-        # Get driver personal profile for avatar
+        personal_prof_res = await db.execute(select(Profile).where(Profile.user_id == profile.user_id))
+        personal_prof = personal_prof_res.scalars().first()
         driver_avatar = None
-        if profile:
-            from app.models.profile import Profile
-            from sqlmodel import select
-            personal_prof_res = await db.execute(
-                select(Profile).where(Profile.user_id == profile.user_id)
-            )
-            personal_prof = personal_prof_res.scalars().first()
-            if personal_prof:
-                driver_avatar = personal_prof.avatar_url
-                if personal_prof.first_name:
-                    driver_name = f"{personal_prof.first_name} {personal_prof.last_name or ''}".strip()
+        if personal_prof:
+            driver_avatar = personal_prof.avatar_url
+            if personal_prof.first_name:
+                driver_name = f"{personal_prof.first_name} {personal_prof.last_name or ''}".strip()
 
-        # Get supported vehicles
-        supported_vehicles = []
-        if profile:
-            from app.models.driving import DriverVehicle
-            from sqlmodel import select
-            veh_res = await db.execute(
-                select(DriverVehicle).where(
-                    DriverVehicle.driver_id == profile.id,
-                    DriverVehicle.is_verified == True
-                )
-            )
-            vehicles_list = veh_res.scalars().all()
-            supported_vehicles = [v.vehicle_type.lower() for v in vehicles_list]
-            if not supported_vehicles:
-                supported_vehicles = [getattr(profile, "vehicle_type", "car").lower()]
+        # 4. Rating
+        rating = 5.0
+        portfolio_res = await db.execute(select(UserPortfolio).where(UserPortfolio.user_id == profile.user_id))
+        portfolio = portfolio_res.scalars().first()
+        if portfolio:
+            avg_rating_res = await db.execute(select(func.avg(Review.rating)).where(Review.portfolio_id == portfolio.id))
+            avg_val = avg_rating_res.scalar()
+            if avg_val is not None:
+                rating = float(avg_val)
+
+        # 5. Supported vehicles
+        veh_res = await db.execute(select(DriverVehicle).where(DriverVehicle.driver_id == profile.id, DriverVehicle.is_verified == True))
+        vehicles_list = veh_res.scalars().all()
+        supported_vehicles = [v.vehicle_type.lower() for v in vehicles_list]
+        if not supported_vehicles:
+            supported_vehicles = [getattr(profile, "vehicle_type", "car").lower()]
 
         response.append(
             DriverNearbyResponse(
-                driver_id=d_id,
-                latitude=d["lat"] if "lat" in d else 0.0,
-                longitude=d["lng"] if "lng" in d else 0.0,
-                distance_km=d["distance_km"],
+                driver_id=profile.id,
+                latitude=d_lat,
+                longitude=d_lng,
+                distance_km=dist_km,
                 car_name=car_name,
                 driver_name=driver_name,
                 rating=rating,
                 driver_avatar=driver_avatar,
                 supported_vehicles=supported_vehicles,
+                is_online=is_online,
+                is_available=is_available,
+                is_booked=is_booked,
+                status=profile.status.value if hasattr(profile.status, 'value') else str(profile.status),
+                booking_status=booking_status,
             )
         )
+
+    # Sort drivers: Available & closest first
+    response.sort(key=lambda d: (0 if d.booking_status == "available" else (1 if d.booking_status == "booked" else 2), d.distance_km))
+
     return response
 
 
