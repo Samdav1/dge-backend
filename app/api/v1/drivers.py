@@ -28,6 +28,7 @@ All driving-related HTTP endpoints:
   └── GET    /drivers/trips/my/driver         → Driver trip history
 """
 
+import math
 import uuid
 from typing import List, Optional
 
@@ -324,15 +325,20 @@ async def ping_location(
 # ===========================================================================
 
 def calculate_haversine(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
-    if lat1 == 0.0 or lon1 == 0.0 or lat2 == 0.0 or lon2 == 0.0:
+    try:
+        lat1_f, lon1_f = float(lat1 or 0), float(lon1 or 0)
+        lat2_f, lon2_f = float(lat2 or 0), float(lon2 or 0)
+        if lat1_f == 0.0 or lon1_f == 0.0 or lat2_f == 0.0 or lon2_f == 0.0:
+            return 999.0
+        dlat = math.radians(lat2_f - lat1_f)
+        dlon = math.radians(lon2_f - lon1_f)
+        a = (math.sin(dlat / 2.0) ** 2 +
+             math.cos(math.radians(lat1_f)) * math.cos(math.radians(lat2_f)) *
+             math.sin(dlon / 2.0) ** 2)
+        c = 2.0 * math.atan2(math.sqrt(a), math.sqrt(1.0 - a))
+        return round(6371.0 * c, 2)
+    except Exception:
         return 999.0
-    dlat = math.radians(lat2 - lat1)
-    dlon = math.radians(lon2 - lon1)
-    a = (math.sin(dlat / 2.0) ** 2 +
-         math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) *
-         math.sin(dlon / 2.0) ** 2)
-    c = 2.0 * math.atan2(math.sqrt(a), math.sqrt(1.0 - a))
-    return round(6371.0 * c, 2)
 
 
 @router.get("/nearby", response_model=List[DriverNearbyResponse])
