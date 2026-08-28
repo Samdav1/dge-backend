@@ -370,6 +370,45 @@ class MatchingService:
         )
         await self._publish_to_ride_channel(trip.id, {"type": "ride_accepted", "trip_id": str(trip.id)})
 
+        # DB Notifications & Emails for Accept
+        try:
+            from app.repositories.notifications_repo import NotificationRepository
+            from app.models.notifications import Notification, NotificationType
+            from app.services.email_notification_service import NotificationService
+            from app.repositories.user_repo import get_user_by_id
+
+            notif_repo = NotificationRepository(self.session)
+            driver_user_id = driver_profile.user_id if driver_profile else driver_id
+            car_info = f"{driver_profile.car_name} {driver_profile.car_model}" if driver_profile else "vehicle"
+
+            # 1. Rider DB Notification
+            rider_notif = Notification(
+                user_id=trip.rider_id,
+                actor_id=driver_user_id,
+                type=NotificationType.general,
+                message=f"Your ride request was accepted! Driver is en route with {car_info}.",
+                metadataInfo={"trip_id": str(trip.id), "type": "ride_accepted"}
+            )
+            await notif_repo.create(rider_notif)
+
+            # 2. Driver DB Notification
+            driver_notif = Notification(
+                user_id=driver_user_id,
+                actor_id=trip.rider_id,
+                type=NotificationType.general,
+                message=f"You accepted trip #{str(trip.id)[:8]}. Proceed to pickup location.",
+                metadataInfo={"trip_id": str(trip.id), "type": "ride_accepted"}
+            )
+            await notif_repo.create(driver_notif)
+
+            # 3. Email Notification to Rider
+            rider_user = await get_user_by_id(driver_user_id if False else trip.rider_id, db=self.session)
+            driver_user = await get_user_by_id(driver_user_id, db=self.session)
+            if rider_user and driver_user:
+                NotificationService().send_ride_accepted_mail(rider=rider_user, driver=driver_user, trip=trip)
+        except Exception as e:
+            logger.error(f"Failed to create DB notifications/email for trip accept: {e}")
+
         logger.info("Trip %s accepted by driver %s (EN_ROUTE)", trip_id, driver_id)
         return trip
 
@@ -448,6 +487,46 @@ class MatchingService:
 
         await self._publish_to_ride_channel(trip.id, payload)
 
+        # DB Notifications & Emails for Accept Counter
+        try:
+            from app.repositories.notifications_repo import NotificationRepository
+            from app.models.notifications import Notification, NotificationType
+            from app.services.email_notification_service import NotificationService
+            from app.repositories.user_repo import get_user_by_id
+
+            notif_repo = NotificationRepository(self.session)
+            driver_user_id = driver_profile.user_id if driver_profile else None
+            car_info = f"{driver_profile.car_name} {driver_profile.car_model}" if driver_profile else "vehicle"
+
+            if driver_user_id:
+                # 1. Rider DB Notification
+                rider_notif = Notification(
+                    user_id=trip.rider_id,
+                    actor_id=driver_user_id,
+                    type=NotificationType.general,
+                    message=f"Counter offer accepted! Driver is en route with {car_info}.",
+                    metadataInfo={"trip_id": str(trip.id), "type": "ride_accepted"}
+                )
+                await notif_repo.create(rider_notif)
+
+                # 2. Driver DB Notification
+                driver_notif = Notification(
+                    user_id=driver_user_id,
+                    actor_id=trip.rider_id,
+                    type=NotificationType.general,
+                    message=f"Rider accepted your counter offer of ₦{trip.estimated_fare:,.2f}! Proceed to pickup.",
+                    metadataInfo={"trip_id": str(trip.id), "type": "ride_accepted"}
+                )
+                await notif_repo.create(driver_notif)
+
+                # 3. Email Notification to Rider
+                rider_user = await get_user_by_id(trip.rider_id, db=self.session)
+                driver_user = await get_user_by_id(driver_user_id, db=self.session)
+                if rider_user and driver_user:
+                    NotificationService().send_ride_accepted_mail(rider=rider_user, driver=driver_user, trip=trip)
+        except Exception as e:
+            logger.error(f"Failed to create DB notifications for accept counter: {e}")
+
         logger.info("Trip %s counter accepted by rider %s (EN_ROUTE)", trip_id, rider_id)
         return trip
 
@@ -466,6 +545,27 @@ class MatchingService:
         payload = {"type": "driver_arrived", "trip_id": str(trip.id)}
         await self.manager.send_to_user(str(trip.rider_id), payload)
         await self._publish_to_ride_channel(trip.id, payload)
+
+        # DB Notifications for Arrive at Pickup
+        try:
+            from app.repositories.notifications_repo import NotificationRepository
+            from app.models.notifications import Notification, NotificationType
+            from app.repositories.driving import DriverRepository
+
+            notif_repo = NotificationRepository(self.session)
+            driver_profile = await DriverRepository(self.session).get_by_id(driver_id)
+            driver_user_id = driver_profile.user_id if driver_profile else driver_id
+
+            rider_notif = Notification(
+                user_id=trip.rider_id,
+                actor_id=driver_user_id,
+                type=NotificationType.general,
+                message="Your driver has arrived at the pickup location!",
+                metadataInfo={"trip_id": str(trip.id), "type": "driver_arrived"}
+            )
+            await notif_repo.create(rider_notif)
+        except Exception as e:
+            logger.error(f"Failed to create DB notification for driver arrival: {e}")
 
         logger.info("Driver %s arrived for trip %s", driver_id, trip_id)
         return trip
@@ -509,6 +609,40 @@ class MatchingService:
             if driver:
                 await self.manager.send_to_user(str(driver.user_id), payload)
         await self._publish_to_ride_channel(trip.id, payload)
+
+        # DB Notifications for Trip Started
+        try:
+            from app.repositories.notifications_repo import NotificationRepository
+            from app.models.notifications import Notification, NotificationType
+            from app.repositories.driving import DriverRepository
+
+            notif_repo = NotificationRepository(self.session)
+            driver_user_id = None
+            if trip.driver_id:
+                driver_profile = await DriverRepository(self.session).get_by_id(trip.driver_id)
+                if driver_profile:
+                    driver_user_id = driver_profile.user_id
+
+            rider_notif = Notification(
+                user_id=trip.rider_id,
+                actor_id=driver_user_id,
+                type=NotificationType.general,
+                message="Trip started! Enjoy your ride.",
+                metadataInfo={"trip_id": str(trip.id), "type": "trip_started"}
+            )
+            await notif_repo.create(rider_notif)
+
+            if driver_user_id:
+                driver_notif = Notification(
+                    user_id=driver_user_id,
+                    actor_id=trip.rider_id,
+                    type=NotificationType.general,
+                    message="Trip started! Drive safely to destination.",
+                    metadataInfo={"trip_id": str(trip.id), "type": "trip_started"}
+                )
+                await notif_repo.create(driver_notif)
+        except Exception as e:
+            logger.error(f"Failed to create DB notification for trip start: {e}")
 
         logger.info("Rider %s confirmed trip start for %s", rider_id, trip_id)
         return trip
@@ -556,20 +690,48 @@ class MatchingService:
                 await self.manager.send_to_user(str(driver.user_id), payload)
         await self._publish_to_ride_channel(trip.id, payload)
 
-        # Trigger cancellation email
+        # DB Notifications & Emails for Cancellation
         try:
+            from app.repositories.notifications_repo import NotificationRepository
+            from app.models.notifications import Notification, NotificationType
             from app.services.email_notification_service import NotificationService
             from app.repositories.user_repo import get_user_by_id
 
+            notif_repo = NotificationRepository(self.session)
             rider_user = await get_user_by_id(db=self.session, user_id=trip.rider_id)
             driver_user = None
+            driver_user_id = None
             if trip.driver_id:
                 driver_profile = await DriverRepository(self.session).get_by_id(trip.driver_id)
                 if driver_profile:
-                    driver_user = await get_user_by_id(db=self.session, user_id=driver_profile.user_id)
+                    driver_user_id = driver_profile.user_id
+                    driver_user = await get_user_by_id(db=self.session, user_id=driver_user_id)
 
-            cancelled_by_user = rider_user if cancelled_by_id == trip.rider_id else driver_user
+            cancelled_by_user = rider_user if cancelled_by_id == trip.rider_id else (driver_user or rider_user)
+            canceller_name = cancelled_by_user.username if cancelled_by_user else "a participant"
 
+            # 1. Rider DB Notification
+            rider_notif = Notification(
+                user_id=trip.rider_id,
+                actor_id=cancelled_by_id,
+                type=NotificationType.general,
+                message=f"Your ride trip #{str(trip.id)[:8]} was cancelled by {canceller_name}.",
+                metadataInfo={"trip_id": str(trip.id), "type": "ride_cancelled"}
+            )
+            await notif_repo.create(rider_notif)
+
+            # 2. Driver DB Notification (if assigned)
+            if driver_user_id:
+                driver_notif = Notification(
+                    user_id=driver_user_id,
+                    actor_id=cancelled_by_id,
+                    type=NotificationType.general,
+                    message=f"Ride trip #{str(trip.id)[:8]} was cancelled by {canceller_name}.",
+                    metadataInfo={"trip_id": str(trip.id), "type": "ride_cancelled"}
+                )
+                await notif_repo.create(driver_notif)
+
+            # 3. Email Notification
             if rider_user and cancelled_by_user:
                 NotificationService().send_ride_cancelled_mail(
                     rider=rider_user,
@@ -577,7 +739,7 @@ class MatchingService:
                     cancelled_by=cancelled_by_user
                 )
         except Exception as e:
-            logger.error(f"Failed to send cancellation email for trip {trip.id}: {e}")
+            logger.error(f"Failed to create DB notifications/email for trip cancellation: {e}")
 
         logger.info("Trip %s cancelled by %s", trip_id, cancelled_by_id)
         return trip
@@ -680,16 +842,40 @@ class MatchingService:
         await self.manager.send_to_user(str(driver_id), payload)
         await self._publish_to_ride_channel(trip.id, payload)
 
-        # Trigger completion email
+        # DB Notifications & Emails for Completion
         try:
+            from app.repositories.notifications_repo import NotificationRepository
+            from app.models.notifications import Notification, NotificationType
             from app.services.email_notification_service import NotificationService
             from app.repositories.user_repo import get_user_by_id
             from app.repositories.driving import DriverRepository
 
+            notif_repo = NotificationRepository(self.session)
             driver_user_id = (await DriverRepository(self.session).get_by_id(trip.driver_id)).user_id
             rider_user = await get_user_by_id(db=self.session, user_id=trip.rider_id)
             driver_user = await get_user_by_id(db=self.session, user_id=driver_user_id)
 
+            # 1. Rider DB Notification
+            rider_notif = Notification(
+                user_id=trip.rider_id,
+                actor_id=driver_user_id,
+                type=NotificationType.general,
+                message=f"Your ride has been completed! Total fare: ₦{trip.final_fare:,.2f}. Thank you for riding with DGE.",
+                metadataInfo={"trip_id": str(trip.id), "type": "ride_completed"}
+            )
+            await notif_repo.create(rider_notif)
+
+            # 2. Driver DB Notification
+            driver_notif = Notification(
+                user_id=driver_user_id,
+                actor_id=trip.rider_id,
+                type=NotificationType.general,
+                message=f"Ride completed! Fare of ₦{trip.final_fare:,.2f} processed for trip #{str(trip.id)[:8]}.",
+                metadataInfo={"trip_id": str(trip.id), "type": "ride_completed"}
+            )
+            await notif_repo.create(driver_notif)
+
+            # 3. Email Notification
             if rider_user and driver_user:
                 NotificationService().send_ride_completed_mail(
                     rider=rider_user,
@@ -697,7 +883,7 @@ class MatchingService:
                     trip=trip
                 )
         except Exception as e:
-            logger.error(f"Failed to send completion email for trip {trip.id}: {e}")
+            logger.error(f"Failed to create DB notifications/email for trip completion: {e}")
 
         logger.info("Trip %s completed | final_fare=%.2f", trip_id, trip.final_fare)
         return trip

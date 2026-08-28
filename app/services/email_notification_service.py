@@ -454,6 +454,19 @@ class NotificationService:
 
     # ─── Rides ──────────────────────────────────────────────────────────────
 
+    def send_ride_accepted_mail(self, rider: Users, driver: Users, trip):
+        subject = "Ride Request Accepted! 🚗"
+        fare_val = getattr(trip, 'negotiated_fare', None) or getattr(trip, 'estimated_fare', 0)
+        rider_context = {
+            'name': rider.username,
+            'service_title': "Driver En Route",
+            'provider_name': driver.username,
+            'price': f"₦{fare_val:,.2f}",
+            'cta_link': f"{settings.frontend_url}/dashboard/rides",
+            'message': f"Your driver {driver.username} has accepted your ride request and is on the way!"
+        }
+        self._render_and_dispatch('ride_completed.html', [rider.email], subject, rider_context)
+
     def send_ride_completed_mail(self, rider: Users, driver: Users, trip):
         # Rider email
         rider_subject = "Your Ride is Complete! 🚗"
