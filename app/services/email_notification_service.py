@@ -43,7 +43,7 @@ class NotificationService:
     # ─── Onboarding ─────────────────────────────────────────────────────────
 
     def send_signup_welcome_mail(self, new_user: UserRead):
-        subject = "Welcome to the DGE World! You're One of Us Now."
+        subject = "Welcome to DGESpace! You're One of Us Now."
         context = {
             'name': new_user.username,
             'cta_text': "Explore Your Dashboard",
@@ -52,7 +52,7 @@ class NotificationService:
         self._render_and_dispatch('welcome.html', [str(new_user.email)], subject, context)
 
     def send_verification_email(self, new_user, token: str):
-        subject = "Welcome to DGE World! Please Verify Your Email"
+        subject = "Welcome to DGESpace! Please Verify Your Email"
         frontend_base = settings.frontend_url.rstrip("/") if settings.frontend_url else "https://dgespace.com"
         verification_link = f"{frontend_base}/verify-email?token={token}"
         email = getattr(new_user, 'email', None)
@@ -67,7 +67,7 @@ class NotificationService:
         self._render_and_dispatch('verify_email.html', [str(email)], subject, context)
 
     def send_verification_success_email(self, user):
-        subject = "You're Verified! Welcome to DGE World 🎉"
+        subject = "You're Verified! Welcome to DGESpace"
         email = getattr(user, 'email', None)
         if not email:
             print("Cannot send verification success email: missing user email")
@@ -81,7 +81,7 @@ class NotificationService:
         self._render_and_dispatch('welcome.html', [str(email)], subject, context)
 
     def send_password_reset_mail(self, user, token: str):
-        subject = "Reset Your DGE World Password 🔐"
+        subject = "Reset Your DGESpace Password"
         username = getattr(user, 'username', 'Valued User')
         email = getattr(user, 'email', '')
         reset_link = f"{settings.frontend_url}/reset-password?token={token}"
@@ -93,7 +93,7 @@ class NotificationService:
 
     def send_password_changed_mail(self, user):
         from datetime import datetime, timezone
-        subject = "Security Alert: Password Changed Successfully 🛡️"
+        subject = "Security Alert: Password Changed Successfully"
         username = getattr(user, 'username', 'Valued User')
         email = getattr(user, 'email', '')
         context = {
@@ -106,7 +106,7 @@ class NotificationService:
 
     def send_profile_updated_mail(self, user, first_name: str = None, last_name: str = None, phone: str = None, country: str = None):
         from datetime import datetime, timezone
-        subject = "Your DGE World Profile Was Updated 👤"
+        subject = "Your DGESpace Profile Was Updated"
         username = getattr(user, 'username', 'Valued User')
         email = getattr(user, 'email', '')
         context = {
@@ -121,7 +121,7 @@ class NotificationService:
         self._render_and_dispatch('profile_updated.html', [str(email)], subject, context)
 
     def send_portfolio_updated_mail(self, user, portfolio_title: str):
-        subject = f"Portfolio Updated: '{portfolio_title}' 🎨"
+        subject = f"Portfolio Updated: '{portfolio_title}'"
         username = getattr(user, 'username', 'Valued User')
         email = getattr(user, 'email', '')
         context = {
@@ -135,7 +135,7 @@ class NotificationService:
 
     def send_deposit_success_mail(self, user, amount_cents: int, reference: str, date_str: str = None):
         from datetime import datetime, timezone
-        subject = "Deposit Successful - DGE World"
+        subject = "Deposit Successful - DGESpace"
         username = getattr(user, 'username', 'Valued User')
         email = getattr(user, 'email', '')
         formatted_date = date_str or datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
@@ -150,7 +150,7 @@ class NotificationService:
 
     def send_wallet_credit_mail(self, user, amount_cents: int, reference: str, description: str = None, date_str: str = None):
         from datetime import datetime, timezone
-        subject = f"Wallet Credited (+₦{amount_cents / 100:,.2f}) - DGE World 💰"
+        subject = f"Wallet Credited (+₦{amount_cents / 100:,.2f}) - DGESpace"
         username = getattr(user, 'username', 'Valued User')
         email = getattr(user, 'email', '')
         formatted_date = date_str or datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
@@ -166,7 +166,7 @@ class NotificationService:
 
     def send_wallet_debit_mail(self, user, amount_cents: int, reference: str, description: str = None, date_str: str = None):
         from datetime import datetime, timezone
-        subject = f"Wallet Debited (-₦{amount_cents / 100:,.2f}) - DGE World 💳"
+        subject = f"Wallet Debited (-₦{amount_cents / 100:,.2f}) - DGESpace"
         username = getattr(user, 'username', 'Valued User')
         email = getattr(user, 'email', '')
         formatted_date = date_str or datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
@@ -220,7 +220,7 @@ class NotificationService:
         amount_str = f"₦{amount_cents / 100:,.2f}"
 
         if status.lower() == "pending":
-            subject = "Withdrawal Request Received ⏳"
+            subject = "Withdrawal Request Received"
             context = {
                 'name': username,
                 'amount': amount_str,
@@ -230,7 +230,7 @@ class NotificationService:
             }
             self._render_and_dispatch('withdrawal_requested.html', [str(email)], subject, context)
         else:
-            subject = f"Withdrawal {status.capitalize()} - DGE World"
+            subject = f"Withdrawal {status.capitalize()} - DGESpace"
             context = {
                 'name': username,
                 'status': status.lower(),
@@ -250,7 +250,7 @@ class NotificationService:
         amount_str = f"₦{amount_cents / 100:,.2f}"
 
         # To Buyer (Receipt)
-        self._render_and_dispatch('service_purchase.html', [buyer.email], "Your Purchase is Confirmed! 🛒", {
+        self._render_and_dispatch('service_purchase.html', [buyer.email], "Your Purchase is Confirmed", {
             'is_buyer': True,
             'name': buyer.username,
             'other_party': seller.username,
@@ -261,7 +261,7 @@ class NotificationService:
         })
 
         # To Seller (New Order)
-        self._render_and_dispatch('service_purchase.html', [seller.email], "You Have a New Order! 🎉", {
+        self._render_and_dispatch('service_purchase.html', [seller.email], "You Have a New Order", {
             'is_buyer': False,
             'name': seller.username,
             'other_party': buyer.username,
@@ -272,7 +272,7 @@ class NotificationService:
         })
 
     def send_project_submitted_mail(self, client: Users, freelancer_name: str, project_name: str, escrow_id: str, submission_date: str):
-        subject = "Project Work Submitted for Review 📝"
+        subject = "Project Work Submitted for Review"
         context = {
             'name': client.username,
             'freelancer_name': freelancer_name,
@@ -284,7 +284,7 @@ class NotificationService:
         self._render_and_dispatch('project_submitted.html', [client.email], subject, context)
 
     def send_price_negotiation_offer(self, receiver: Users, initiator: Users, negotiation: PriceNegotiation):
-        subject = f"An Opportunity Awaits!🌟 You've Received a New Offer from {initiator.username}"
+        subject = f"An Opportunity Awaits! You've Received a New Offer from {initiator.username}"
         amount_formatted = f"₦{negotiation.proposed_price_cents / 100:,.2f}"
 
         # We don't have the service title directly here, we could add it or just use "Project"
@@ -300,7 +300,7 @@ class NotificationService:
     # ─── Escrow ─────────────────────────────────────────────────────────────
 
     def send_escrow_creation_debit(self, payer: Users, negotiation):
-        subject = "Account Debited by DGE World Escrow Service"
+        subject = "Account Debited by DGESpace Escrow Service"
         context = {
             'event_title': "Funds Sent to Escrow",
             'event_type': 'creation_payer',
@@ -455,7 +455,7 @@ class NotificationService:
     # ─── Rides ──────────────────────────────────────────────────────────────
 
     def send_ride_accepted_mail(self, rider: Users, driver: Users, trip):
-        subject = "Ride Request Accepted! 🚗"
+        subject = "Ride Request Accepted"
         fare_val = getattr(trip, 'negotiated_fare', None) or getattr(trip, 'estimated_fare', 0)
         rider_context = {
             'name': rider.username,
@@ -469,7 +469,7 @@ class NotificationService:
 
     def send_ride_completed_mail(self, rider: Users, driver: Users, trip):
         # Rider email
-        rider_subject = "Your Ride is Complete! 🚗"
+        rider_subject = "Your Ride is Complete"
         rider_context = {
             'name': rider.username,
             'service_title': "Ride Completed",
@@ -481,7 +481,7 @@ class NotificationService:
         self._render_and_dispatch('ride_completed.html', [rider.email], rider_subject, rider_context)
 
         # Driver email
-        driver_subject = "Ride Successfully Completed! 🎉"
+        driver_subject = "Ride Successfully Completed"
         driver_context = {
             'name': driver.username,
             'service_title': "Ride Earnings Added",
@@ -521,7 +521,7 @@ class NotificationService:
     # ─── Job Board & Service Marketplace ───────────────────────────────────
 
     def send_job_posted_mail(self, user: Users, job):
-        subject = f"Job Posted Successfully: {job.title} 🚀"
+        subject = f"Job Posted Successfully: {job.title}"
         context = {
             'name': user.username,
             'job_title': job.title,
@@ -532,7 +532,7 @@ class NotificationService:
         self._render_and_dispatch('job_posted.html', [user.email], subject, context)
 
     def send_job_application_mail(self, poster: Users, applicant: Users, job, proposed_price_cents: int):
-        subject = f"New Bid on Your Job: '{job.title}' 📩"
+        subject = f"New Bid on Your Job: '{job.title}'"
         context = {
             'poster_name': poster.username,
             'applicant_name': applicant.username,
@@ -544,9 +544,9 @@ class NotificationService:
 
     def send_kyc_status_mail(self, user: Users, status: str, rejection_reason: str = None):
         if status in ["verified", "approved"]:
-            subject = "KYC Verification Approved 🎉 - DGE World"
+            subject = "KYC Verification Approved - DGESpace"
         else:
-            subject = "KYC Verification Status Update - DGE World"
+            subject = "KYC Verification Status Update - DGESpace"
 
         email = getattr(user, 'email', None)
         if not email:
@@ -563,9 +563,9 @@ class NotificationService:
 
     def send_driver_license_status_mail(self, user: Users, status: str, rejection_reason: str = None):
         if status in ["verified", "approved"]:
-            subject = "Driver License Verification Approved 🎉 - DGE World"
+            subject = "Driver License Verification Approved - DGESpace"
         else:
-            subject = "Driver License Verification Update - DGE World"
+            subject = "Driver License Verification Update - DGESpace"
 
         email = getattr(user, 'email', None)
         if not email:
@@ -582,9 +582,9 @@ class NotificationService:
 
     def send_service_status_mail(self, user: Users, service, status: str):
         if status in ["approved", "ACTIVE"]:
-            subject = f"Service Approved: '{service.name}' 🎉"
+            subject = f"Service Approved: '{service.name}'"
         else:
-            subject = f"Service Submitted for Review: '{service.name}' 📋"
+            subject = f"Service Submitted for Review: '{service.name}'"
 
         context = {
             'name': user.username,
@@ -595,7 +595,7 @@ class NotificationService:
         self._render_and_dispatch('service_status.html', [user.email], subject, context)
 
     def send_job_approved_mail(self, poster: Users, freelancer: Users, job_title: str, price_cents: int):
-        subject = f"Your Job Bid Was Accepted: '{job_title}' 🎉"
+        subject = f"Your Job Bid Was Accepted: '{job_title}'"
         amount_formatted = f"₦{price_cents / 100:,.2f}"
         context = {
             'name': freelancer.username,

@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 
 {% block content %}
-<h2>Price Negotiation Status Update 💬</h2>
+<h2>Price Negotiation Status Update</h2>
 
 <p>Hi {{ name }},</p>
 
@@ -10,7 +10,7 @@
 <table class="details-table">
     <tr>
         <th>Status</th>
-        <td style="font-weight: bold;">{{ status_display }}</td>
+        <td>{{ status_display }}</td>
     </tr>
     <tr>
         <th>Updated By</th>
@@ -19,7 +19,7 @@
     {% if amount %}
     <tr>
         <th>Negotiated Price</th>
-        <td style="color: #0ea5e9; font-weight: bold;">{{ amount }}</td>
+        <td style="color: #C5A059; font-weight: 600;">{{ amount }}</td>
     </tr>
     {% endif %}
 </table>

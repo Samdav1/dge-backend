@@ -6,10 +6,10 @@
 <p>Hi {{ name }},</p>
 
 {% if event_type == 'creation_payer' %}
-<p>Just a quick confirmation! Your escrow payment has been successfully sent from your wallet and is now securely held in Escrow. The funds are safe and will only be released when you approve the work or upon administrative release.</p>
+<p>Just a quick confirmation: your escrow payment has been successfully sent from your wallet and is now securely held in Escrow. The funds are protected and will only be released when you approve the work or upon administrative release.</p>
 
 {% elif event_type == 'creation_payee' %}
-<p>This is a confirmation that an Escrow has been created for your project. The funds are securely held by DGE World, so you can begin working with peace of mind!</p>
+<p>This is a confirmation that an Escrow has been created for your project. The funds are securely held by DGESpace, so you can begin working with peace of mind.</p>
 
 {% elif event_type == 'release_payee' %}
 <p>Great news! The escrow payment of <strong>{{ amount }}</strong> has been successfully released and deposited into your <strong>Earnings Wallet</strong>.</p>
@@ -25,7 +25,7 @@
 <p>This is a notification regarding Escrow ID <strong>{{ escrow_id }}</strong>. The escrow funds of <strong>{{ amount }}</strong> have been refunded back to the client.</p>
 
 {% elif event_type == 'dispute_payer' or event_type == 'dispute_payee' %}
-<p>A dispute request has been opened for Escrow ID <strong>{{ escrow_id }}</strong>. Don't worry, the funds are held securely while our administration team reviews the situation.</p>
+<p>A dispute request has been opened for Escrow ID <strong>{{ escrow_id }}</strong>. Your funds are held securely while our administration team reviews the situation.</p>
 <p>Our goal is always a fair outcome. Please provide any relevant details via the support desk or dispute center.</p>
 
 {% elif event_type == 'dispute_resolved_release_payee' %}
@@ -53,7 +53,7 @@
     <tr>
         <th>Amount</th>
         {% if event_type in ['release_payee', 'refund_payer', 'dispute_resolved_release_payee', 'dispute_resolved_refund_payer'] %}
-        <td style="color: #10b981;">+{{ amount }}</td>
+        <td style="color: #16a34a;">+{{ amount }}</td>
         {% else %}
         <td>{{ amount }}</td>
         {% endif %}

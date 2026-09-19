@@ -1,11 +1,11 @@
 {% extends "base.html" %}
 
 {% block content %}
-<h2>Your Job Bid Has Been Accepted! 🎉</h2>
+<h2>Your Job Bid Has Been Accepted</h2>
 
 <p>Hi {{ name }},</p>
 
-<p>Great news! Your bid on the job <strong>"{{ job_title }}"</strong> was accepted by <strong>{{ client_name }}</strong>.</p>
+<p>Great news: your bid on the job <strong>"{{ job_title }}"</strong> was accepted by <strong>{{ client_name }}</strong>.</p>
 
 <table class="details-table">
     <tr>
@@ -14,7 +14,7 @@
     </tr>
     <tr>
         <th>Agreed Price</th>
-        <td style="color: #10b981; font-weight: bold;">{{ amount }}</td>
+        <td style="color: #16a34a; font-weight: 600;">{{ amount }}</td>
     </tr>
     <tr>
         <th>Client</th>

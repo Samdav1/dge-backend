@@ -3,12 +3,13 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <meta name="color-scheme" content="light dark">
     <meta name="supported-color-schemes" content="light dark">
     <title>{{ subject }}</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <style>
         :root {
             color-scheme: light dark;
@@ -19,71 +20,92 @@
             font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
             margin: 0;
             padding: 0;
-            background-color: #f8f9fa;
-            color: #1e293b;
+            background-color: #F4F5F7;
+            color: #475569;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
         }
-        .wrapper {
+        .email-wrapper {
             width: 100%;
-            background-color: #f8f9fa;
-            padding: 40px 20px;
+            background-color: #F4F5F7;
+            padding: 40px 16px;
             box-sizing: border-box;
         }
-        .container {
+        .email-container {
             max-width: 600px;
             margin: 0 auto;
-            background-color: #ffffff;
+            background-color: #FFFFFF;
             border-radius: 12px;
             overflow: hidden;
-            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.05), 0 8px 10px -6px rgba(0, 0, 0, 0.01);
-            border: 1px solid #f1f5f9;
+            box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.04), 0 2px 6px -1px rgba(0, 0, 0, 0.02);
+            border: 1px solid #EAECEF;
         }
-        .header {
-            background-color: #0f172a;
-            color: #ffffff;
-            padding: 40px 32px;
+        .gold-top-bar {
+            height: 4px;
+            background: linear-gradient(90deg, #B89047 0%, #C5A059 50%, #E0C27E 100%);
+            line-height: 4px;
+            font-size: 0;
+        }
+        .email-header {
+            background-color: #FFFFFF;
+            padding: 36px 32px 24px;
             text-align: center;
-            border-bottom: 4px solid #C69C2E;
+            border-bottom: 1px solid #F1F3F5;
         }
         .logo {
-            font-size: 32px;
-            font-weight: 700;
-            color: #C69C2E;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            font-size: 26px;
+            font-weight: 800;
+            letter-spacing: 0.5px;
             margin: 0;
-            letter-spacing: -0.5px;
             text-transform: uppercase;
+            line-height: 1;
         }
-        .logo span {
-            color: #ffffff;
+        .logo-dge {
+            color: #0F172A;
         }
-        .content {
-            padding: 40px 32px;
+        .logo-space {
+            color: #C5A059;
+            margin-left: 2px;
+            font-weight: 700;
+        }
+        .email-content {
+            padding: 36px 32px;
+            line-height: 1.65;
+            color: #475569;
+        }
+        .email-content h2 {
+            margin: 0 0 20px;
+            font-size: 22px;
+            font-weight: 600;
+            color: #0F172A;
+            letter-spacing: -0.02em;
+        }
+        .email-content p {
+            margin: 0 0 16px;
+            font-size: 15px;
+            color: #475569;
+            line-height: 1.65;
+        }
+        .email-content strong {
+            color: #0F172A;
+            font-weight: 600;
+        }
+        .email-content ul {
+            padding-left: 20px;
+            margin-bottom: 20px;
+            background-color: #F8F9FA;
+            border: 1px solid #EBECEF;
+            border-radius: 8px;
+            padding: 18px 20px 18px 38px;
+        }
+        .email-content li {
+            margin-bottom: 10px;
+            color: #475569;
+            font-size: 14px;
             line-height: 1.6;
         }
-        .content h2 {
-            margin: 0 0 24px;
-            font-size: 24px;
-            font-weight: 700;
-            color: #0f172a;
-        }
-        .content p {
-            margin: 0 0 16px;
-            font-size: 16px;
-            color: #334155;
-        }
-        .content ul {
-            padding-left: 20px;
-            margin-bottom: 24px;
-            background-color: #f8fafc;
-            border: 1px solid #e2e8f0;
-            border-radius: 8px;
-            padding: 20px 20px 20px 40px;
-        }
-        .content li {
-            margin-bottom: 12px;
-            color: #334155;
-            font-size: 15px;
-        }
-        .content li:last-child {
+        .email-content li:last-child {
             margin-bottom: 0;
         }
         .cta-container {
@@ -92,128 +114,218 @@
         }
         .cta-button {
             display: inline-block;
-            background-color: #C69C2E;
-            color: #ffffff !important;
-            padding: 16px 32px;
+            background-color: #C5A059;
+            color: #FFFFFF !important;
+            padding: 14px 30px;
             text-decoration: none;
-            border-radius: 8px;
+            border-radius: 6px;
             font-weight: 600;
-            font-size: 16px;
-            transition: all 0.2s ease-in-out;
-            box-shadow: 0 4px 6px -1px rgba(198, 156, 46, 0.2);
+            font-size: 15px;
+            letter-spacing: 0.3px;
+            transition: all 0.2s ease;
+            box-shadow: 0 2px 6px rgba(197, 160, 89, 0.25);
         }
         .cta-button:hover {
-            background-color: #b08b29;
-            transform: translateY(-2px);
-            box-shadow: 0 6px 12px -2px rgba(198, 156, 46, 0.3);
+            background-color: #B08B3A;
+            box-shadow: 0 4px 10px rgba(197, 160, 89, 0.35);
         }
-        .footer {
-            background-color: #0f172a;
-            color: #94a3b8;
-            padding: 32px;
+        .email-footer {
+            background-color: #F8F9FA;
+            color: #8A94A6;
+            padding: 28px 32px;
             text-align: center;
             font-size: 13px;
+            line-height: 1.6;
+            border-top: 1px solid #EAECEF;
         }
-        .footer p {
-            margin: 0 0 8px;
+        .email-footer p {
+            margin: 0 0 6px;
+            color: #64748B;
         }
-        .footer a {
-            color: #C69C2E;
+        .email-footer a {
+            color: #C5A059;
             text-decoration: none;
-            font-weight: 600;
+            font-weight: 500;
         }
-        .footer a:hover {
+        .email-footer a:hover {
             text-decoration: underline;
         }
         
         .divider {
             height: 1px;
-            background-color: #e2e8f0;
-            margin: 32px 0;
+            background-color: #ECEEF2;
+            margin: 28px 0;
+            border: none;
         }
         
         .details-table {
             width: 100%;
             border-collapse: collapse;
-            margin-bottom: 24px;
+            margin: 20px 0;
+            background-color: #F8F9FB;
+            border: 1px solid #EBECEF;
+            border-radius: 8px;
+            overflow: hidden;
         }
         .details-table th, .details-table td {
-            padding: 12px 0;
-            border-bottom: 1px solid #f1f5f9;
+            padding: 12px 16px;
+            border-bottom: 1px solid #ECEEF2;
             text-align: left;
         }
+        .details-table tr:last-child th, .details-table tr:last-child td {
+            border-bottom: none;
+        }
         .details-table th {
-            color: #64748b;
+            color: #64748B;
             font-weight: 600;
-            font-size: 14px;
-            width: 40%;
+            font-size: 13px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            width: 42%;
         }
         .details-table td {
-            color: #0f172a;
+            color: #0F172A;
             font-weight: 600;
             font-size: 15px;
             text-align: right;
         }
 
-        /* START: DARK MODE STYLES */
-        @media (prefers-color-scheme: dark) {
-            body, .wrapper {
-                background-color: #020617 !important;
-                color: #e2e8f0 !important;
+        /* Mobile responsiveness */
+        @media only screen and (max-width: 600px) {
+            .email-wrapper {
+                padding: 16px 8px !important;
             }
-            .container {
-                background-color: #0f172a !important;
-                border-color: #1e293b !important;
+            .email-header {
+                padding: 28px 20px 20px !important;
             }
-            .content h2 {
-                color: #ffffff !important;
+            .email-content {
+                padding: 28px 20px !important;
             }
-            .content p, .content li {
-                color: #cbd5e1 !important;
-            }
-            .content ul {
-                background-color: #1e293b !important;
-                border-color: #334155 !important;
-            }
-            .details-table td {
-                color: #f8fafc !important;
-            }
-            .details-table th {
-                color: #94a3b8 !important;
+            .email-footer {
+                padding: 24px 20px !important;
             }
             .details-table th, .details-table td {
-                border-bottom-color: #1e293b !important;
+                padding: 10px 12px !important;
+                font-size: 13px !important;
             }
-            .divider {
-                background-color: #1e293b !important;
-            }
-            .footer {
-                border-top: 1px solid #1e293b !important;
+            .cta-button {
+                display: block !important;
+                padding: 14px 20px !important;
             }
         }
-        /* END: DARK MODE STYLES */
+
+        /* Dark mode styles */
+        @media (prefers-color-scheme: dark) {
+            body, .email-wrapper {
+                background-color: #0B0D13 !important;
+                color: #CBD5E1 !important;
+            }
+            .email-container {
+                background-color: #141721 !important;
+                border-color: #222738 !important;
+            }
+            .email-header {
+                background-color: #141721 !important;
+                border-bottom-color: #222738 !important;
+            }
+            .logo-dge {
+                color: #FFFFFF !important;
+            }
+            .logo-space {
+                color: #D4AF37 !important;
+            }
+            .email-content {
+                color: #CBD5E1 !important;
+            }
+            .email-content h2 {
+                color: #FFFFFF !important;
+            }
+            .email-content p, .email-content li {
+                color: #94A3B8 !important;
+            }
+            .email-content strong {
+                color: #F1F5F9 !important;
+            }
+            .email-content ul {
+                background-color: #1A1E2B !important;
+                border-color: #262B3D !important;
+            }
+            .details-table {
+                background-color: #1A1E2B !important;
+                border-color: #262B3D !important;
+            }
+            .details-table th {
+                color: #8A94A6 !important;
+            }
+            .details-table td {
+                color: #F8FAFC !important;
+            }
+            .details-table th, .details-table td {
+                border-bottom-color: #262B3D !important;
+            }
+            .divider {
+                background-color: #222738 !important;
+            }
+            .email-footer {
+                background-color: #0E1119 !important;
+                border-top-color: #222738 !important;
+                color: #64748B !important;
+            }
+            .email-footer p {
+                color: #64748B !important;
+            }
+        }
     </style>
 </head>
 <body>
-    <div class="wrapper">
-        <div class="container">
-            <div class="header">
-                <p class="logo">DGE <span>World</span></p>
-            </div>
-            <div class="content">
-                {% block content %}{% endblock %}
-                
-                <div class="divider"></div>
-                
-                <p style="font-size: 14px; color: #64748b;">If you have any questions or need assistance, our support team is always here to help.</p>
-                <p style="font-size: 14px; color: #64748b; margin-bottom: 0;">Best regards,<br><strong style="color: #0f172a;">The DGE World Team</strong></p>
-            </div>
-            <div class="footer">
-                <p>&copy; {{ current_year | default('2024') }} DGE World. All rights reserved.</p>
-                <p>Building a world centered on trust, unity, and unique experiences.</p>
-                <p style="margin-top: 16px;"><a href="#">Privacy Policy</a> &nbsp;|&nbsp; <a href="#">Terms of Service</a></p>
-            </div>
-        </div>
-    </div>
+    <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" class="email-wrapper" style="background-color: #F4F5F7; margin: 0; padding: 40px 16px;">
+        <tr>
+            <td align="center">
+                <!--[if (gte mso 9)|(IE)]>
+                <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="600" align="center">
+                <tr>
+                <td>
+                <![endif]-->
+                <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" class="email-container" style="max-width: 600px; margin: 0 auto; background-color: #FFFFFF; border-radius: 12px; overflow: hidden; border: 1px solid #EAECEF; box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.04);">
+                    <!-- Top Gold Bar -->
+                    <tr>
+                        <td class="gold-top-bar" style="height: 4px; background-color: #C5A059; line-height: 4px; font-size: 0;">&nbsp;</td>
+                    </tr>
+                    <!-- Header -->
+                    <tr>
+                        <td class="email-header" align="center" style="background-color: #FFFFFF; padding: 36px 32px 24px; text-align: center; border-bottom: 1px solid #F1F3F5;">
+                            <h1 class="logo" style="margin: 0; font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 26px; font-weight: 800; letter-spacing: 0.5px; text-transform: uppercase; line-height: 1;">
+                                <span class="logo-dge" style="color: #0F172A;">DGE</span><span class="logo-space" style="color: #C5A059; margin-left: 2px; font-weight: 700;">SPACE</span>
+                            </h1>
+                        </td>
+                    </tr>
+                    <!-- Content -->
+                    <tr>
+                        <td class="email-content" style="padding: 36px 32px; font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.65; color: #475569;">
+                            {% block content %}{% endblock %}
+                            
+                            <div class="divider" style="height: 1px; background-color: #ECEEF2; margin: 28px 0;"></div>
+                            
+                            <p style="font-size: 14px; color: #64748B; margin: 0 0 10px;">If you have any questions or need assistance, our support team is always here to help.</p>
+                            <p style="font-size: 14px; color: #64748B; margin: 0;">Best regards,<br><strong class="team-name" style="color: #0F172A; font-weight: 600;">The DGESpace Team</strong></p>
+                        </td>
+                    </tr>
+                    <!-- Footer -->
+                    <tr>
+                        <td class="email-footer" style="background-color: #F8F9FA; color: #8A94A6; padding: 28px 32px; text-align: center; font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 13px; line-height: 1.6; border-top: 1px solid #EAECEF;">
+                            <p style="margin: 0 0 6px; color: #64748B;">&copy; {{ current_year | default('2026') }} DGESpace. All rights reserved.</p>
+                            <p style="margin: 0 0 12px; font-size: 12px; color: #94A3B8;">Empowering seamless experiences, trust, and innovation.</p>
+                            <p style="margin: 0;"><a href="#" style="color: #C5A059; text-decoration: none; font-weight: 500;">Privacy Policy</a> &nbsp;&bull;&nbsp; <a href="#" style="color: #C5A059; text-decoration: none; font-weight: 500;">Terms of Service</a></p>
+                        </td>
+                    </tr>
+                </table>
+                <!--[if (gte mso 9)|(IE)]>
+                </td>
+                </tr>
+                </table>
+                <![endif]-->
+            </td>
+        </tr>
+    </table>
 </body>
 </html>

@@ -2,7 +2,7 @@
 
 {% block content %}
 {% if is_buyer %}
-<h2>Your Purchase is Confirmed! 🛒</h2>
+<h2>Your Purchase is Confirmed</h2>
 
 <p>Hi {{ name }},</p>
 
@@ -19,7 +19,7 @@
     </tr>
     <tr>
         <th>Amount Paid</th>
-        <td style="color: #0ea5e9;">{{ amount }}</td>
+        <td style="color: #C5A059; font-weight: 600;">{{ amount }}</td>
     </tr>
     <tr>
         <th>Order ID</th>
@@ -32,7 +32,7 @@
 </div>
 
 {% else %}
-<h2>You Have a New Order! 🎉</h2>
+<h2>You Have a New Order</h2>
 
 <p>Hi {{ name }},</p>
 
@@ -49,7 +49,7 @@
     </tr>
     <tr>
         <th>Expected Earnings</th>
-        <td style="color: #10b981;">{{ amount }}</td>
+        <td style="color: #16a34a; font-weight: 600;">{{ amount }}</td>
     </tr>
     <tr>
         <th>Order ID</th>
@@ -57,7 +57,7 @@
     </tr>
 </table>
 
-<p>Please review the buyer's requirements and communicate with them through the DGE World platform.</p>
+<p>Please review the buyer's requirements and communicate with them through the DGESpace platform.</p>
 
 <div class="cta-container">
     <a href="{{ cta_link }}" class="cta-button">View Order & Start Work</a>

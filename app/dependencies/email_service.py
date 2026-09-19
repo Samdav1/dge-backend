@@ -30,7 +30,7 @@ class EmailService:
         from app.config import settings
 
         self.provider = settings.email_provider.lower()
-        sender_name = os.getenv("EMAIL_SENDER_NAME", "DGE World")
+        sender_name = os.getenv("EMAIL_SENDER_NAME", "DGESpace")
 
         if self.provider == "resend":
             self.config = {

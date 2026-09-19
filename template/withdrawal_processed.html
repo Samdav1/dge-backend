@@ -6,12 +6,12 @@
 <p>Hi {{ name }},</p>
 
 {% if status == 'completed' or status == 'approved' or status == 'processing' %}
-<p>Great news! Your withdrawal request has been <strong>approved</strong> and the funds are on their way to your bank account. Depending on your bank, it may take a short while to reflect in your balance.</p>
+<p>Great news: your withdrawal request has been <strong>approved</strong> and the funds are on their way to your bank account. Depending on your bank, it may take a short while to reflect in your balance.</p>
 
 <table class="details-table">
     <tr>
         <th>Amount Transferred</th>
-        <td style="color: #10b981;">{{ amount }}</td>
+        <td style="color: #16a34a; font-weight: 600;">{{ amount }}</td>
     </tr>
     <tr>
         <th>Destination Bank</th>
@@ -28,7 +28,7 @@
 </table>
 
 {% else %}
-<p>We're sorry, but your withdrawal request has been <strong>rejected</strong> by our administrative team. The requested funds have been returned to your DGE World wallet.</p>
+<p>We regret to inform you that your withdrawal request has been <strong>rejected</strong> by our administrative team. The requested funds have been returned to your DGESpace wallet.</p>
 
 <table class="details-table">
     <tr>
@@ -37,7 +37,7 @@
     </tr>
     <tr>
         <th>Reason for Rejection</th>
-        <td style="color: #ef4444;">{{ rejection_reason | default('Administrative review failure') }}</td>
+        <td style="color: #DC2626; font-weight: 600;">{{ rejection_reason | default('Administrative review failure') }}</td>
     </tr>
 </table>
 
