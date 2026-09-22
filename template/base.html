@@ -52,6 +52,15 @@
             text-align: center;
             border-bottom: 1px solid #F1F3F5;
         }
+        .logo-img {
+            max-width: 140px;
+            height: auto;
+            display: block;
+            margin: 0 auto;
+            border: 0;
+            outline: none;
+            text-decoration: none;
+        }
         .logo {
             font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
             font-size: 26px;
@@ -293,10 +302,10 @@
                     </tr>
                     <!-- Header -->
                     <tr>
-                        <td class="email-header" align="center" style="background-color: #FFFFFF; padding: 36px 32px 24px; text-align: center; border-bottom: 1px solid #F1F3F5;">
-                            <h1 class="logo" style="margin: 0; font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 26px; font-weight: 800; letter-spacing: 0.5px; text-transform: uppercase; line-height: 1;">
-                                <span class="logo-dge" style="color: #0F172A;">DGE</span><span class="logo-space" style="color: #C5A059; margin-left: 2px; font-weight: 700;">SPACE</span>
-                            </h1>
+                        <td class="email-header" align="center" style="background-color: #FFFFFF; padding: 32px 32px 24px; text-align: center; border-bottom: 1px solid #F1F3F5;">
+                            <a href="{{ frontend_url | default('https://dgespace.com') }}" target="_blank" style="text-decoration: none; display: inline-block;">
+                                <img src="{{ logo_url | default('https://dgespace.com/DGE%20logo.png') }}" alt="DGESpace" width="140" class="logo-img" style="display: block; border: 0; outline: none; text-decoration: none; max-width: 140px; height: auto; margin: 0 auto;" />
+                            </a>
                         </td>
                     </tr>
                     <!-- Content -->

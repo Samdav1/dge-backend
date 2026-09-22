@@ -24,6 +24,9 @@ class NotificationService:
         try:
             # Inject common context
             context['subject'] = subject
+            frontend_base = settings.frontend_url.rstrip("/") if settings.frontend_url else "https://dgespace.com"
+            context.setdefault('frontend_url', frontend_base)
+            context.setdefault('logo_url', f"{frontend_base}/DGE%20logo.png")
 
             template = self.env.get_template(template_name)
             html_output = template.render(context)

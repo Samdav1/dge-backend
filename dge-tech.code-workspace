@@ -8,10 +8,12 @@
 		}
 	],
 	"settings": {
+		"task.allowAutomaticTasks": true,
 		"typescript.tsserver.experimental.enableProjectDiagnostics": true,
 		"typescript.tsdk": "node_modules/typescript/lib",
 		"debug.openDebug": "neverOpen",
 		"problems.autoReveal": true,
+		"terminal.integrated.hideOnStartup": "always",
 		"terminal.integrated.defaultProfile.windows": "Command Prompt"
 	}
 }
