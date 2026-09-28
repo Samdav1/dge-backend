@@ -42,6 +42,10 @@ async def create_user_service(db: AsyncSession, user: UserCreate):
     if not await get_user_wallet_service(db, user_read.id):
         await create_user_wallet_service(db, user_read.id)
 
+    # Initialize user DGE Points with sign up bonus (10 points)
+    from app.services.points_service import get_or_create_user_points
+    await get_or_create_user_points(db, user_read.id)
+
     notification_service = NotificationService()
     notification_service.send_signup_welcome_mail(user_read)
 
@@ -117,6 +121,10 @@ async def google_auth_signup(token: GoogleCallBack, db: AsyncSession, referral_c
         """Creating User Wallet Service"""
         if not await get_user_wallet_service(db, user.id):
             await create_user_wallet_service(db, user.id)
+
+        # Initialize user DGE Points with sign up bonus (10 points)
+        from app.services.points_service import get_or_create_user_points
+        await get_or_create_user_points(db, user.id)
 
         notification_service = NotificationService()
         notification_service.send_signup_welcome_mail(user)

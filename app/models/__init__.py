@@ -1,3 +1,4 @@
+from .points import AdminPointsSettings, UserPoints, PointsTransaction
 from .team import TeamUsers, Teams, TeamMembership
 from .user import Users, Locations, Admin, RefreshToken
 from .driving import DriverProfile, Ride, DriverLocation, Trip, TripStatus, RideStatus, DriverVehicle
@@ -75,4 +76,7 @@ __all__ = [
     "PlatformFeeConfig",
     "PlatformRevenueLog",
     "DriverVehicle",
+    "AdminPointsSettings",
+    "UserPoints",
+    "PointsTransaction",
 ]

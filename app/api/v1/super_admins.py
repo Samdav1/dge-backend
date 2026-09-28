@@ -2269,6 +2269,51 @@ async def update_payment_settings(
     }
 
 
+@router.get("/points-settings")
+async def get_admin_points_settings(db: AsyncSession = Depends(get_session)):
+    """Return the current platform DGE Points settings."""
+    from app.services.points_service import get_points_settings as _get_pts
+    settings = await _get_pts(db)
+    return {
+        "id": settings.id,
+        "rate_per_point": settings.rate_per_point,
+        "signup_bonus_points": settings.signup_bonus_points,
+        "min_purchase_points": settings.min_purchase_points,
+        "updated_at": settings.updated_at.isoformat() if settings.updated_at else None,
+    }
+
+
+@router.put("/points-settings")
+async def update_admin_points_settings(
+    req: Request,
+    db: AsyncSession = Depends(get_session),
+):
+    """Update platform-wide DGE Points settings (exchange rate, signup bonus)."""
+    from app.services.points_service import update_points_settings as _update_pts
+    try:
+        body = await req.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid JSON body")
+
+    rate = body.get("rate_per_point")
+    bonus = body.get("signup_bonus_points")
+    min_pts = body.get("min_purchase_points")
+
+    settings = await _update_pts(
+        db=db,
+        rate_per_point=float(rate) if rate is not None else None,
+        signup_bonus_points=int(bonus) if bonus is not None else None,
+        min_purchase_points=int(min_pts) if min_pts is not None else None,
+    )
+    return {
+        "id": settings.id,
+        "rate_per_point": settings.rate_per_point,
+        "signup_bonus_points": settings.signup_bonus_points,
+        "min_purchase_points": settings.min_purchase_points,
+        "updated_at": settings.updated_at.isoformat() if settings.updated_at else None,
+    }
+
+
 @router.get("/withdrawals")
 async def list_withdrawals(
     status: Optional[str] = None,
