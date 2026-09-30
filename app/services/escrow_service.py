@@ -219,6 +219,19 @@ class EscrowService:
             self.db.add(escrow)
             await self.db.commit()
 
+            # DGE Points: Deduct 2 points from client upon successfully completing the service
+            try:
+                from app.services import points_service
+                await points_service.deduct_user_points(
+                    db=self.db,
+                    user_id=payer_user.id,
+                    points=2,
+                    description=f"Completed Service #{str(escrow.id)[:8]}",
+                    context="marketplace"
+                )
+            except Exception as e:
+                print(f"[Points] Error deducting service completion points: {e}")
+
         except Exception as e:
             await self.db.rollback()
             raise HTTPException(

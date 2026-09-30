@@ -354,6 +354,31 @@ class MatchingService:
         # Fetch driver profile to send name/car to rider
         driver_profile = await self.driver_repo.get_by_id(driver_id)
 
+        # DGE Points: Deduct 1 point each from rider and driver for agreed ride
+        try:
+            from app.services import points_service
+            driver_user_id = driver_profile.user_id if driver_profile else driver_id
+            await points_service.deduct_user_points(
+                db=self.session,
+                user_id=trip.rider_id,
+                points=1,
+                description=f"Agreed Ride Trip #{str(trip.id)[:8]}",
+                context="driving"
+            )
+            points_service.reset_failed_negotiation(trip.rider_id, context="driving")
+
+            if driver_user_id:
+                await points_service.deduct_user_points(
+                    db=self.session,
+                    user_id=driver_user_id,
+                    points=1,
+                    description=f"Agreed Ride Trip #{str(trip.id)[:8]}",
+                    context="driving"
+                )
+                points_service.reset_failed_negotiation(driver_user_id, context="driving")
+        except Exception as e:
+            logger.error(f"[Points] Error deducting ride agreement points in accept_trip: {e}")
+
         # Notify rider via WebSocket
         await self.manager.send_to_user(
             str(trip.rider_id),
@@ -467,6 +492,30 @@ class MatchingService:
         driver_profile = None
         if trip.driver_id:
             driver_profile = await self.driver_repo.get_by_id(trip.driver_id)
+
+        # DGE Points: Deduct 1 point each from rider and driver for agreed ride negotiation
+        try:
+            from app.services import points_service
+            await points_service.deduct_user_points(
+                db=self.session,
+                user_id=trip.rider_id,
+                points=1,
+                description=f"Agreed Ride Negotiation #{str(trip.id)[:8]}",
+                context="driving"
+            )
+            points_service.reset_failed_negotiation(trip.rider_id, context="driving")
+
+            if driver_profile and driver_profile.user_id:
+                await points_service.deduct_user_points(
+                    db=self.session,
+                    user_id=driver_profile.user_id,
+                    points=1,
+                    description=f"Agreed Ride Negotiation #{str(trip.id)[:8]}",
+                    context="driving"
+                )
+                points_service.reset_failed_negotiation(driver_profile.user_id, context="driving")
+        except Exception as e:
+            logger.error(f"[Points] Error deducting ride counter agreement points: {e}")
 
         # Notify rider via WebSocket
         payload = {
@@ -667,8 +716,21 @@ class MatchingService:
         if trip.rider_id != cancelled_by_id and (trip.driver_id is None or trip.driver_id != driver_profile_id):
             raise PermissionError("You are not a party to this trip.")
 
+        prev_status = trip.status
         trip.status = TripStatus.CANCELLED
         trip = await self.trip_repo.update(trip)
+
+        # DGE Points: If cancelled during negotiation/pending status, record failed attempt
+        if prev_status == TripStatus.PENDING:
+            try:
+                from app.services import points_service
+                await points_service.record_failed_negotiation(
+                    db=self.session,
+                    user_id=cancelled_by_id,
+                    context="driving"
+                )
+            except Exception as e:
+                logger.error(f"[Points] Error recording failed driving negotiation: {e}")
 
         # Re-enable driver availability
         if trip.driver_id:
@@ -828,6 +890,19 @@ class MatchingService:
 
         # Commit trip update and all wallet/transaction changes
         trip = await self.trip_repo.update(trip)
+
+        # DGE Points: Deduct 2 points from client/rider on trip completion
+        try:
+            from app.services import points_service
+            await points_service.deduct_user_points(
+                db=self.session,
+                user_id=trip.rider_id,
+                points=2,
+                description=f"Completed Ride Trip #{str(trip.id)[:8]}",
+                context="driving"
+            )
+        except Exception as e:
+            logger.error(f"[Points] Error deducting trip completion points: {e}")
 
         # Re-enable driver availability
         await self.redis_loc.set_availability(driver_id, available=True)

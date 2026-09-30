@@ -21,6 +21,16 @@ class BuyPointsRequest(BaseModel):
     points: int = Field(..., ge=1, description="Number of DGE Points to buy")
 
 
+class SpendPointsRequest(BaseModel):
+    points: int = Field(..., ge=1, description="Number of DGE Points to spend")
+    description: str = Field(..., description="Reason for points deduction")
+    context: Optional[str] = Field(None, description="Domain context (e.g., marketplace, posted_job, driving)")
+
+
+class RecordFailedNegotiationRequest(BaseModel):
+    context: str = Field("general", description="Context: marketplace, posted_job, or driving")
+
+
 @router.get("/settings", summary="Get public DGE Points settings & rate")
 async def get_points_settings(db: AsyncSession = Depends(get_session)):
     """Returns current exchange rate per point and signup bonus."""
@@ -106,5 +116,37 @@ async def verify_points_payment(
         db=db,
         user_id=credentials.id,
         reference=reference,
+    )
+    return result
+
+
+@router.post("/spend", summary="Deduct DGE Points for usage, negotiation or completed services")
+async def spend_points(
+    payload: SpendPointsRequest,
+    db: AsyncSession = Depends(get_session),
+    credentials: UserRead = Depends(get_current_user),
+):
+    """Deduct points from the current user's balance and record a spend transaction."""
+    result = await points_service.deduct_user_points(
+        db=db,
+        user_id=credentials.id,
+        points=payload.points,
+        description=payload.description,
+        context=payload.context,
+    )
+    return result
+
+
+@router.post("/record-failed-negotiation", summary="Record an unagreed negotiation attempt for fair-use policy")
+async def record_failed_negotiation(
+    payload: RecordFailedNegotiationRequest,
+    db: AsyncSession = Depends(get_session),
+    credentials: UserRead = Depends(get_current_user),
+):
+    """Record a failed negotiation attempt. After 3 attempts without agreement, 1 point is deducted."""
+    result = await points_service.record_failed_negotiation(
+        db=db,
+        user_id=credentials.id,
+        context=payload.context,
     )
     return result

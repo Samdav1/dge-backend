@@ -97,4 +97,13 @@ class PostedJobRepository:
         for bid in bids:
             bid.status = NegotiationStatus.rejected
             self.db.add(bid)
+            try:
+                from app.services import points_service
+                await points_service.record_failed_negotiation(
+                    db=self.db,
+                    user_id=bid.initiator_id,
+                    context="posted_job"
+                )
+            except Exception as e:
+                print(f"[Points] Error recording unaccepted bid for provider {bid.initiator_id}: {e}")
         await self.db.commit()

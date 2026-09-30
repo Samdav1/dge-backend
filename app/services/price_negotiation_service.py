@@ -217,6 +217,34 @@ class PriceNegotiationService:
             )
             await escrow_service.create_escrow(user=user, payload=new_escrow)
 
+            # DGE Points: Deduct 1 point on accepted negotiation
+            from app.services import points_service
+            try:
+                if negotiation.posted_job_id:
+                    # Posted Job: Service provider pays 1 point
+                    provider_id = negotiation.initiator_id
+                    await points_service.deduct_user_points(
+                        db=db,
+                        user_id=provider_id,
+                        points=1,
+                        description="Accepted Posted Job Bid",
+                        context="posted_job"
+                    )
+                    points_service.reset_failed_negotiation(provider_id, context="posted_job")
+                else:
+                    # Marketplace Service: Client pays 1 point
+                    client_id = negotiation.initiator_id
+                    await points_service.deduct_user_points(
+                        db=db,
+                        user_id=client_id,
+                        points=1,
+                        description="Accepted Service Negotiation",
+                        context="marketplace"
+                    )
+                    points_service.reset_failed_negotiation(client_id, context="marketplace")
+            except Exception as e:
+                print(f"[Points] Error deducting negotiation points: {e}")
+
             # If this bid is for a posted job, close it and reject other bids
             if negotiation.posted_job_id:
                 from app.models.posted_job import PostedJob
@@ -226,6 +254,27 @@ class PriceNegotiationService:
                 if job:
                     await job_repo.update(job, {"status": PostedJobStatus.assigned})
                 await job_repo.reject_other_bids(negotiation.posted_job_id, negotiation_id)
+
+        elif payload.status == "rejected":
+            # DGE Points: Record failed negotiation for 3-attempt fair use rule
+            from app.services import points_service
+            try:
+                if negotiation.posted_job_id:
+                    provider_id = negotiation.initiator_id
+                    await points_service.record_failed_negotiation(
+                        db=db,
+                        user_id=provider_id,
+                        context="posted_job"
+                    )
+                else:
+                    client_id = negotiation.initiator_id
+                    await points_service.record_failed_negotiation(
+                        db=db,
+                        user_id=client_id,
+                        context="marketplace"
+                    )
+            except Exception as e:
+                print(f"[Points] Error recording failed negotiation: {e}")
 
         if payload.status:
             if payload.status == "accepted":

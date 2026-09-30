@@ -349,3 +349,97 @@ async def verify_points_purchase_gateway(
             "status": "pending",
             "message": "Payment not yet confirmed. Please complete payment or try again in a few moments.",
         }
+
+
+# In-memory store for tracking unagreed/failed negotiations per user and context
+_failed_negotiation_counts: Dict[str, int] = {}
+
+
+async def deduct_user_points(
+    db: AsyncSession,
+    user_id: uuid.UUID,
+    points: int,
+    description: str,
+    context: Optional[str] = None
+) -> Dict[str, Any]:
+    """
+    Deducts points from a user's balance and records a PointsTransaction of type 'spend'.
+    - If user has fewer points than requested, it deducts down to 0 without going negative.
+    """
+    if points <= 0:
+        return {"success": False, "error": "Points amount to deduct must be greater than zero"}
+
+    user_points = await get_or_create_user_points(db, user_id)
+    settings = await get_points_settings(db)
+
+    actual_deduct = min(user_points.balance, points)
+    user_points.balance -= actual_deduct
+    user_points.total_spent += actual_deduct
+    user_points.updated_at = datetime.now(timezone.utc)
+    db.add(user_points)
+
+    reference = f"DGE-SPEND-{uuid.uuid4().hex[:10].upper()}"
+    p_tx = PointsTransaction(
+        user_id=user_id,
+        points=actual_deduct,
+        naira_amount=actual_deduct * settings.rate_per_point,
+        rate_at_time=settings.rate_per_point,
+        type="spend",
+        status="successful",
+        reference=reference,
+        description=description,
+    )
+    db.add(p_tx)
+
+    await db.commit()
+    await db.refresh(user_points)
+
+    logger.info(f"Deducted {actual_deduct} DGE Points from user {user_id} for: {description}")
+
+    return {
+        "success": True,
+        "points_deducted": actual_deduct,
+        "new_balance": user_points.balance,
+        "reference": reference,
+        "description": description,
+    }
+
+
+async def record_failed_negotiation(
+    db: AsyncSession,
+    user_id: uuid.UUID,
+    context: str = "general"
+) -> Dict[str, Any]:
+    """
+    Tracks failed/unagreed negotiation attempts.
+    If 3 failed attempts are reached without an agreement,
+    1 DGE Point is deducted and the counter is reset.
+    """
+    key = f"{str(user_id)}:{context}"
+    count = _failed_negotiation_counts.get(key, 0) + 1
+
+    if count >= 3:
+        _failed_negotiation_counts[key] = 0
+        desc = f"Fair-Use: 3 Unagreed {context.replace('_', ' ').title()} Negotiations"
+        res = await deduct_user_points(db, user_id, points=1, description=desc, context=context)
+        return {
+            "deducted": True,
+            "count": 3,
+            "points_deducted": res.get("points_deducted", 1),
+            "new_balance": res.get("new_balance"),
+            "message": "1 DGE Point deducted after 3 unagreed negotiations.",
+        }
+    else:
+        _failed_negotiation_counts[key] = count
+        return {
+            "deducted": False,
+            "count": count,
+            "message": f"{count}/3 unagreed attempts recorded before 1-point fair-use deduction.",
+        }
+
+
+def reset_failed_negotiation(user_id: uuid.UUID, context: str = "general") -> None:
+    """Resets the failed negotiation counter upon a successful agreement."""
+    key = f"{str(user_id)}:{context}"
+    _failed_negotiation_counts[key] = 0
+
