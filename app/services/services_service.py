@@ -59,8 +59,38 @@ class ServiceService:
 
         return created_service
 
-    async def list_services(self, *, user_id=None, status=None, type=None, search=None, category_id=None, offset: int = 0, limit: int = 100, sort_by: str = "newest") -> List[Service]:
-        return await self.repo.list(user_id=user_id, status=status, type=type, search=search, category_id=category_id, offset=offset, limit=limit, sort_by=sort_by)
+    async def list_services(
+        self,
+        *,
+        user_id=None,
+        status=None,
+        type=None,
+        search=None,
+        category_id=None,
+        country: Optional[str] = None,
+        state: Optional[str] = None,
+        city: Optional[str] = None,
+        near_me: Optional[bool] = False,
+        user_profile: Optional[object] = None,
+        offset: int = 0,
+        limit: int = 100,
+        sort_by: str = "newest"
+    ) -> List[Service]:
+        return await self.repo.list(
+            user_id=user_id,
+            status=status,
+            type=type,
+            search=search,
+            category_id=category_id,
+            country=country,
+            state=state,
+            city=city,
+            near_me=near_me,
+            user_profile=user_profile,
+            offset=offset,
+            limit=limit,
+            sort_by=sort_by
+        )
 
     async def get_service(self, service_id: uuid.UUID):
         service = await self.repo.get(service_id)

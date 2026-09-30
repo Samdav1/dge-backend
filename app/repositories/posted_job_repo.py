@@ -33,15 +33,73 @@ class PostedJobRepository:
         )
         return result.scalar_one_or_none()
 
-    async def list_open(self, category_id: Optional[uuid.UUID] = None, search: Optional[str] = None) -> List[PostedJob]:
-        query = select(PostedJob).where(PostedJob.status == PostedJobStatus.open).options(
-            selectinload(PostedJob.user),
-            selectinload(PostedJob.category),
+    async def list_open(
+        self,
+        category_id: Optional[uuid.UUID] = None,
+        search: Optional[str] = None,
+        country: Optional[str] = None,
+        state: Optional[str] = None,
+        city: Optional[str] = None,
+        near_me: Optional[bool] = False,
+        user_profile: Optional[object] = None,
+    ) -> List[PostedJob]:
+        from app.models.user import Users
+        from app.models.profile import Profile
+        from sqlalchemy import or_
+
+        query = (
+            select(PostedJob)
+            .where(PostedJob.status == PostedJobStatus.open)
+            .outerjoin(PostedJob.user)
+            .outerjoin(Users.profile)
+            .options(
+                selectinload(PostedJob.user),
+                selectinload(PostedJob.category),
+            )
         )
         if category_id:
             query = query.where(PostedJob.category_id == category_id)
         if search:
-            query = query.where(PostedJob.title.ilike(f"%{search}%"))
+            search_pat = f"%{search}%"
+            query = query.where(or_(
+                PostedJob.title.ilike(search_pat),
+                PostedJob.description.ilike(search_pat)
+            ))
+
+        if near_me and user_profile:
+            loc_conds = []
+            user_city = getattr(user_profile, "city", None)
+            user_state = getattr(user_profile, "state", None)
+            if user_city:
+                c_pat = f"%{user_city.strip()}%"
+                loc_conds.append(PostedJob.description.ilike(c_pat))
+                loc_conds.append(Profile.city.ilike(c_pat))
+            if user_state:
+                s_pat = f"%{user_state.strip()}%"
+                loc_conds.append(PostedJob.description.ilike(s_pat))
+                loc_conds.append(Profile.state.ilike(s_pat))
+            if loc_conds:
+                query = query.where(or_(*loc_conds))
+        else:
+            if city and city.strip():
+                city_pat = f"%{city.strip()}%"
+                query = query.where(or_(
+                    PostedJob.description.ilike(city_pat),
+                    Profile.city.ilike(city_pat)
+                ))
+            if state and state.strip():
+                state_pat = f"%{state.strip()}%"
+                query = query.where(or_(
+                    PostedJob.description.ilike(state_pat),
+                    Profile.state.ilike(state_pat)
+                ))
+            if country and country.strip():
+                country_pat = f"%{country.strip()}%"
+                query = query.where(or_(
+                    PostedJob.description.ilike(country_pat),
+                    Profile.country.ilike(country_pat)
+                ))
+
         result = await self.db.execute(query.order_by(PostedJob.created_at.desc()))
         return result.scalars().all()
 

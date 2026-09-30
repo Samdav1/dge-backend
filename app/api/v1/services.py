@@ -75,6 +75,10 @@ async def list_services(
         only_mine: Optional[bool] = False,
         search: Optional[str] = None,
         category_id: Optional[uuid.UUID] = None,
+        country: Optional[str] = None,
+        state: Optional[str] = None,
+        city: Optional[str] = None,
+        near_me: Optional[bool] = False,
         offset: int = 0,
         limit: int = 100,
         sort_by: str = "newest",
@@ -83,10 +87,33 @@ async def list_services(
         service: ServiceService = Depends(get_service_service),
 ):
     from app.models.services import ServiceStatus, ServiceType  # local import
+    from sqlmodel import select
+    from app.models.profile import Profile
+
     status_enum = ServiceStatus(status) if status else None
     type_enum = ServiceType(type) if type else None
     user_id = (current_user.id if current_user else None) if only_mine else None
-    results = await service.list_services(user_id=user_id, status=status_enum, type=type_enum, search=search, category_id=category_id, offset=offset, limit=limit, sort_by=sort_by)
+
+    user_profile = None
+    if current_user:
+        res = await db.execute(select(Profile).where(Profile.user_id == current_user.id))
+        user_profile = res.scalar_one_or_none()
+
+    results = await service.list_services(
+        user_id=user_id,
+        status=status_enum,
+        type=type_enum,
+        search=search,
+        category_id=category_id,
+        country=country,
+        state=state,
+        city=city,
+        near_me=near_me,
+        user_profile=user_profile,
+        offset=offset,
+        limit=limit,
+        sort_by=sort_by
+    )
     return results
 
 

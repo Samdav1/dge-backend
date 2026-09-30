@@ -64,8 +64,25 @@ class PostedJobService:
 
         return PostedJobRead.model_validate(full)
 
-    async def list_open_jobs(self, category_id: Optional[uuid.UUID] = None, search: Optional[str] = None) -> List[PostedJobRead]:
-        jobs = await self.repo.list_open(category_id=category_id, search=search)
+    async def list_open_jobs(
+        self,
+        category_id: Optional[uuid.UUID] = None,
+        search: Optional[str] = None,
+        country: Optional[str] = None,
+        state: Optional[str] = None,
+        city: Optional[str] = None,
+        near_me: Optional[bool] = False,
+        user_profile: Optional[object] = None,
+    ) -> List[PostedJobRead]:
+        jobs = await self.repo.list_open(
+            category_id=category_id,
+            search=search,
+            country=country,
+            state=state,
+            city=city,
+            near_me=near_me,
+            user_profile=user_profile,
+        )
         result = []
         for j in jobs:
             schema = PostedJobRead.model_validate(j)

@@ -39,12 +39,18 @@ class ServiceRepository:
             type=None,
             search: Optional[str] = None,
             category_id: Optional[uuid.UUID] = None,
+            country: Optional[str] = None,
+            state: Optional[str] = None,
+            city: Optional[str] = None,
+            near_me: Optional[bool] = False,
+            user_profile: Optional[object] = None,
             offset: int = 0,  # Added for performance
             limit: int = 100,  # Added to prevent memory crashes
             sort_by: str = "newest",  # Added for frontend sorting sections
     ) -> List[Service]:
 
         from app.models.portfolio import UserPortfolio, Review
+        from app.models.profile import Profile
         q = select(Service).options(
             selectinload(Service.categories),
             joinedload(Service.user).options(
@@ -74,6 +80,26 @@ class ServiceRepository:
             q = q.where(or_(Service.name.ilike(search_pattern), Service.description.ilike(search_pattern)))
         if category_id:
             q = q.join(ServiceCategoryLink).where(ServiceCategoryLink.category_id == category_id)
+
+        if country or state or city or (near_me and user_profile):
+            q = q.join(Users, Service.user_id == Users.id).join(Profile, Users.id == Profile.user_id)
+            if near_me and user_profile:
+                loc_conds = []
+                user_city = getattr(user_profile, "city", None)
+                user_state = getattr(user_profile, "state", None)
+                if user_city:
+                    loc_conds.append(Profile.city.ilike(f"%{user_city.strip()}%"))
+                if user_state:
+                    loc_conds.append(Profile.state.ilike(f"%{user_state.strip()}%"))
+                if loc_conds:
+                    q = q.where(or_(*loc_conds))
+            else:
+                if city and city.strip():
+                    q = q.where(Profile.city.ilike(f"%{city.strip()}%"))
+                if state and state.strip():
+                    q = q.where(Profile.state.ilike(f"%{state.strip()}%"))
+                if country and country.strip():
+                    q = q.where(Profile.country.ilike(f"%{country.strip()}%"))
 
         if sort_by == "trending":
             q = q.order_by(Service.upvotes.desc())

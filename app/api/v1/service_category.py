@@ -55,7 +55,7 @@ async def delete_category(category_id: uuid.UUID, session: AsyncSession = Depend
 
 # ---- ServiceCategoryLink Endpoints ----
 @router.post("/link", response_model=ServiceCategoryLinkRead, status_code=status.HTTP_201_CREATED)
-async def create_link(data: ServiceCategoryLinkCreate, session: StopAsyncIteration = Depends(get_session)):
+async def create_link(data: ServiceCategoryLinkCreate, session: AsyncSession = Depends(get_session)):
     return await ServiceCategoryLinkService(session).create_link(data)
 
 

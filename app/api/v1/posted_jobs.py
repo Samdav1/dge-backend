@@ -5,7 +5,8 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.db.session import get_session
-from app.dependencies.auth import get_current_user, verify_user_kyc
+from app.dependencies.auth import get_current_user, verify_user_kyc, get_optional_current_user
+from sqlmodel import select
 from app.schemas.posted_job import PostedJobCreate, PostedJobRead, PostedJobUpdate
 from app.schemas.price_negotiation import PriceNegotiationRead, PriceNegotiationCreate
 from app.schemas.user import UserRead
@@ -33,10 +34,30 @@ async def create_posted_job(
 async def list_open_jobs(
     category_id: Optional[uuid.UUID] = None,
     search: Optional[str] = None,
+    country: Optional[str] = None,
+    state: Optional[str] = None,
+    city: Optional[str] = None,
+    near_me: Optional[bool] = False,
+    db: AsyncSession = Depends(get_session),
+    current_user: Optional[UserRead] = Depends(get_optional_current_user),
     service: PostedJobService = Depends(get_service),
 ):
-    """List all open posted jobs (public marketplace feed — no auth required)."""
-    return await service.list_open_jobs(category_id=category_id, search=search)
+    """List all open posted jobs (public marketplace feed with optional category and location filtering)."""
+    user_profile = None
+    if current_user:
+        from app.models.profile import Profile
+        res = await db.execute(select(Profile).where(Profile.user_id == current_user.id))
+        user_profile = res.scalar_one_or_none()
+
+    return await service.list_open_jobs(
+        category_id=category_id,
+        search=search,
+        country=country,
+        state=state,
+        city=city,
+        near_me=near_me,
+        user_profile=user_profile,
+    )
 
 
 @router.get("/me", response_model=List[PostedJobRead])
