@@ -207,6 +207,20 @@ async def handle_deposit_webhook(db: AsyncSession, payload: dict) -> dict:
     deposit = res.scalar_one_or_none()
 
     if not deposit:
+        # Check if this reference is for a Points purchase (e.g. DGE-PT-...)
+        from app.models.points import PointsTransaction
+        pt_stmt = select(PointsTransaction).where(PointsTransaction.reference == payment_reference)
+        pt_res = await db.execute(pt_stmt)
+        pt_tx = pt_res.scalar_one_or_none()
+
+        if pt_tx:
+            from app.services import points_service
+            res_pt = await points_service.verify_points_purchase_gateway(
+                db, user_id=pt_tx.user_id, reference=payment_reference
+            )
+            logger.info(f"Points purchase {payment_reference} processed via webhook: {res_pt}")
+            return {"processed": True, "action": "points_credited", "detail": res_pt}
+
         logger.warning(f"Deposit with reference {payment_reference} not found")
         return {"processed": False, "reason": "Deposit not found"}
 

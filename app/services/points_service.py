@@ -222,6 +222,7 @@ async def initiate_points_purchase_gateway(
     user_email: str,
     user_name: str,
     points: int,
+    redirect_url: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Initiate direct points purchase using Monnify payment gateway."""
     if points < 1:
@@ -232,6 +233,12 @@ async def initiate_points_purchase_gateway(
     total_naira = points * rate
 
     payment_reference = f"DGE-PT-{uuid.uuid4().hex[:12].upper()}"
+
+    from app.config import settings as app_settings
+    effective_redirect_url = redirect_url
+    if not effective_redirect_url:
+        base_frontend = (app_settings.frontend_url or "https://dgespace.com").rstrip("/")
+        effective_redirect_url = f"{base_frontend}/dashboard/points?paymentReference={payment_reference}&status=paid"
 
     payment_link = None
     virtual_account = None
@@ -244,6 +251,7 @@ async def initiate_points_purchase_gateway(
             customer_name=user_name,
             payment_reference=payment_reference,
             payment_description=f"Purchase {points} DGE Points",
+            redirect_url=effective_redirect_url,
         )
         payment_link = monnify_resp.get("checkoutUrl")
         va_info = monnify_resp.get("accountDetails")
@@ -275,6 +283,7 @@ async def initiate_points_purchase_gateway(
         "points": points,
         "amount_naira": total_naira,
         "payment_link": payment_link,
+        "redirect_url": effective_redirect_url,
         "virtual_account_number": virtual_account,
         "virtual_bank_name": virtual_bank,
         "status": "pending",
@@ -312,10 +321,20 @@ async def verify_points_purchase_gateway(
     is_paid = False
     try:
         mon_status = await monnify_service.get_transaction_status(reference)
-        resp_body = mon_status.get("responseBody", {})
-        pay_status = resp_body.get("paymentStatus", "").upper()
-        if pay_status == "PAID":
+        # monnify_service.get_transaction_status already returns responseBody dict if present
+        resp_body = mon_status.get("responseBody", mon_status) if isinstance(mon_status, dict) else {}
+        pay_status = str(
+            resp_body.get("paymentStatus")
+            or mon_status.get("paymentStatus")
+            or resp_body.get("status")
+            or mon_status.get("status")
+            or ""
+        ).upper()
+
+        if pay_status in ("PAID", "OVERPAID", "SUCCESSFUL", "COMPLETED", "SUCCESS"):
             is_paid = True
+        else:
+            logger.info(f"Points purchase status from Monnify for {reference}: {pay_status}")
     except Exception as e:
         logger.warning(f"Could not verify transaction with Monnify: {e}. Checking fallback/mock...")
         # If in dev/test environment without active Monnify credentials, check reference prefix
@@ -342,6 +361,7 @@ async def verify_points_purchase_gateway(
             "message": f"Payment verified! {tx.points} DGE Points credited to your account.",
             "balance": user_points.balance,
             "points": tx.points,
+            "points_credited": tx.points,
         }
     else:
         return {

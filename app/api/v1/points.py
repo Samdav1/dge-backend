@@ -19,6 +19,7 @@ router = APIRouter(tags=["DGE Points"])
 
 class BuyPointsRequest(BaseModel):
     points: int = Field(..., ge=1, description="Number of DGE Points to buy")
+    redirect_url: Optional[str] = Field(None, description="Frontend redirect URL upon payment completion")
 
 
 class SpendPointsRequest(BaseModel):
@@ -101,6 +102,7 @@ async def buy_points_gateway(
         user_email=credentials.email,
         user_name=user_name,
         points=payload.points,
+        redirect_url=payload.redirect_url,
     )
     return result
 
